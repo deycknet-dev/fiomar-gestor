@@ -327,8 +327,53 @@ function restore(){modal('Restaurar backup',[['b','Cole aqui o texto do backup',
 const CFG0={pagto:'Dinheiro, cartão de crédito, cartão de débito, pix ou link de pagamento.',garantia:'3 meses de garantia.'};
 function qFotos(fs){S.q.fotos=S.q.fotos||[];[...fs].forEach(f=>pic(f,d=>{S.q.fotos.push({src:d,obs:''});render()}))}
 function editCfg(){const c=db.cfg||{};modal('Dados da oficina',[['nome','Nome fantasia','text',0,1],['razao','Razão social'],['cnpj','CNPJ'],['end','Endereço'],['cidade','Cidade, UF e CEP'],['email','E-mail','email'],['tel1','Telefone 1','tel'],['tel2','Telefone 2','tel'],['pixtipo','Tipo da chave PIX','select',['Telefone','CPF/CNPJ','E-mail','Chave aleatória']],['pix','Chave PIX'],['pixnome','Nome do favorecido do PIX'],['pagto','Meios de pagamento','area'],['garantia','Condições da garantia','area'],['resp','Responsável (assinatura)']],{...CFG0,...c},o=>{db.cfg={...c,...o};save();render()})}
-function cfgImg(k,f){if(!f)return;const r=new FileReader();r.onload=()=>{const i=new Image();i.onload=()=>{const s=Math.min(1,500/Math.max(i.width,i.height)),cv=document.createElement('canvas');cv.width=i.width*s;cv.height=i.height*s;const x=cv.getContext('2d');if(k=='assin'){x.fillStyle='#fff';x.fillRect(0,0,cv.width,cv.height)}x.drawImage(i,0,0,cv.width,cv.height);(db.cfg=db.cfg||{})[k]=cv.toDataURL(k=='logo'?'image/png':'image/jpeg',.85);save();render()};i.src=r.result};r.readAsDataURL(f)}
-function Vcfg0(){const c={...CFG0,...db.cfg};return`<div class="bar"><h1>Minha oficina</h1><span class="sp"></span><button class="pr" onclick="editCfg()">Editar dados</button></div><p class="muted">Estes dados aparecem no cabeçalho e no rodapé dos PDFs.</p><div class="card"><b>${e(c.nome||'Preencha os dados da oficina')}</b><br>${[c.razao,c.cnpj,c.end,c.cidade,c.email&&'E-mail: '+c.email,c.tel1&&'Telefone: '+c.tel1,c.tel2&&'Telefone: '+c.tel2,c.pix&&'Chave PIX ('+(c.pixtipo||'Telefone')+'): '+c.pix,c.pixnome&&'Favorecido: '+c.pixnome].filter(Boolean).map(x=>e(x)).join('<br>')}</div><div class="g2">${[['logo','Logotipo'],['assin','Assinatura']].map(([k,l])=>`<div class="card"><b>${l}</b><div style="margin:8px 0">${c[k]?`<img src="${c[k]}" alt="${l}" style="max-height:80px;max-width:100%;background:#fff">`:'<span class="muted">Nenhuma imagem.</span>'}</div><label class="btn sm" style="margin:0">${c[k]?'Trocar':'Enviar'} imagem<input type="file" accept="image/*" class="fi" onchange="toast('Processando foto...');cfgImg('${k}',this.files[0])"></label></div>`).join('')}</div>`}
+/* ---------- Editor de imagem (cortar) ---------- */
+let CR=null;
+function cropMove(o,m,dx,dy,W,H,a){const MIN=30;
+ if(m=='m')return{x:Math.max(0,Math.min(W-o.w,o.x+dx)),y:Math.max(0,Math.min(H-o.h,o.y+dy)),w:o.w,h:o.h};
+ let x1=o.x,y1=o.y,x2=o.x+o.w,y2=o.y+o.h;
+ if(m.includes('l'))x1=Math.max(0,Math.min(x2-MIN,x1+dx));
+ if(m.includes('r'))x2=Math.min(W,Math.max(x1+MIN,x2+dx));
+ if(m.includes('t'))y1=Math.max(0,Math.min(y2-MIN,y1+dy));
+ if(m.includes('b'))y2=Math.min(H,Math.max(y1+MIN,y2+dy));
+ const n={x:x1,y:y1,w:x2-x1,h:y2-y1};
+ if(a){if(/[lr]/.test(m)){n.h=n.w/a;n.y=m.includes('t')?o.y+o.h-n.h:m.includes('b')?o.y:o.y+o.h/2-n.h/2}
+  else{n.w=n.h*a;n.x=o.x+o.w/2-n.w/2;if(m.includes('t'))n.y=o.y+o.h-n.h}
+  if(n.x<-.5||n.y<-.5||n.x+n.w>W+.5||n.y+n.h>H+.5||n.w<MIN||n.h<MIN)return o}
+ return n}
+function cropImg(file,opt,done){if(!file)return;
+ const go=url=>{const i=new Image();i.onload=()=>{const k=Math.min(1,1600/Math.max(i.width,i.height)),src=document.createElement('canvas');src.width=Math.round(i.width*k);src.height=Math.round(i.height*k);src.getContext('2d').drawImage(i,0,0,src.width,src.height);CR={src,opt,done,asp:0,m:null};cropOpen()};i.onerror=()=>toast('Não consegui abrir a imagem');i.src=url};
+ if(typeof file=='string')return go(file);const r=new FileReader();r.onload=()=>go(r.result);r.readAsDataURL(file)}
+function cropOpen(){const C=CR,s=Math.min((innerWidth-56)/C.src.width,Math.min(innerHeight*.48,460)/C.src.height,4),w=Math.round(C.src.width*s),h=Math.round(C.src.height*s);
+ $('#modal').innerHTML=`<div class="ov"><div class="md"><h2 style="margin-top:0">Ajustar imagem</h2><p class="muted" style="margin:0 0 10px">Arraste os cantos ou as bordas para escolher a área. Arraste por dentro para mover.</p><div style="display:flex;justify-content:center"><canvas id="crc" width="${w}" height="${h}" style="touch-action:none;max-width:100%;background:#8a949c;border-radius:6px"></canvas></div>
+ <div class="bar" style="margin:10px 0">${[[0,'Livre'],[1,'1:1'],[4/3,'4:3'],[16/9,'16:9'],[3,'3:1']].map(([a,n])=>`<button type="button" class="sm" data-a="${a}" onclick="cropAsp(${a})">${n}</button>`).join('')}<button type="button" class="sm" onclick="cropRot()">Girar</button><button type="button" class="sm" onclick="cropAsp(0,1)">Imagem inteira</button></div>
+ <div class="bar" style="margin:6px 0 0"><button type="button" onclick="closeM()">Cancelar</button><span class="sp"></span><button type="button" class="pr" onclick="cropOk()">Cortar e salvar</button></div></div></div>`;
+ cropBind();cropAsp(C.asp)}
+function cropAsp(a,all){const C=CR,cv=$('#crc'),W=cv.width,H=cv.height;C.asp=all?0:a;let bw=W,bh=H;
+ if(C.asp){bw=Math.min(W,H*C.asp);bh=bw/C.asp;bw*=.9;bh*=.9}
+ C.b={x:(W-bw)/2,y:(H-bh)/2,w:bw,h:bh};
+ document.querySelectorAll('#crc ~ .bar [data-a],.md [data-a]').forEach(b=>b.classList.toggle('pr',+b.dataset.a==C.asp));cropDraw()}
+function cropRot(){const C=CR,s=C.src,n=document.createElement('canvas');n.width=s.height;n.height=s.width;const x=n.getContext('2d');x.translate(n.width,0);x.rotate(Math.PI/2);x.drawImage(s,0,0);C.src=n;cropOpen()}
+function cropDraw(){const C=CR,cv=$('#crc');if(!cv)return;const x=cv.getContext('2d'),w=cv.width,h=cv.height,b=C.b;
+ x.clearRect(0,0,w,h);x.drawImage(C.src,0,0,w,h);x.fillStyle='rgba(0,0,0,.55)';x.fillRect(0,0,w,b.y);x.fillRect(0,b.y+b.h,w,h-b.y-b.h);x.fillRect(0,b.y,b.x,b.h);x.fillRect(b.x+b.w,b.y,w-b.x-b.w,b.h);
+ x.strokeStyle='rgba(255,255,255,.5)';x.lineWidth=1;x.beginPath();for(let i=1;i<3;i++){x.moveTo(b.x+b.w*i/3,b.y);x.lineTo(b.x+b.w*i/3,b.y+b.h);x.moveTo(b.x,b.y+b.h*i/3);x.lineTo(b.x+b.w,b.y+b.h*i/3)}x.stroke();
+ x.strokeStyle='#fff';x.lineWidth=2;x.strokeRect(b.x,b.y,b.w,b.h);x.fillStyle='#fff';x.strokeStyle='#15212B';x.lineWidth=1;
+ [[b.x,b.y],[b.x+b.w,b.y],[b.x,b.y+b.h],[b.x+b.w,b.y+b.h],[b.x+b.w/2,b.y],[b.x+b.w/2,b.y+b.h],[b.x,b.y+b.h/2],[b.x+b.w,b.y+b.h/2]].forEach(([px,py])=>{x.fillRect(px-6,py-6,12,12);x.strokeRect(px-6,py-6,12,12)})}
+function cropBind(){const C=CR,cv=$('#crc'),T=24,pos=e=>{const r=cv.getBoundingClientRect();return[(e.clientX-r.left)*cv.width/r.width,(e.clientY-r.top)*cv.height/r.height]};
+ cv.onpointerdown=e=>{const[px,py]=pos(e),b=C.b,nr=(a,v)=>Math.abs(a-v)<T,inX=px>b.x-T&&px<b.x+b.w+T,inY=py>b.y-T&&py<b.y+b.h+T;let m='';
+  if(inY&&nr(px,b.x))m+='l';else if(inY&&nr(px,b.x+b.w))m+='r';
+  if(inX&&nr(py,b.y))m+='t';else if(inX&&nr(py,b.y+b.h))m+='b';
+  if(!m&&px>b.x&&px<b.x+b.w&&py>b.y&&py<b.y+b.h)m='m';
+  if(!m)return;C.m=m;C.st={px,py,b:{...b}};cv.setPointerCapture(e.pointerId);e.preventDefault()};
+ cv.onpointermove=e=>{if(!C.m)return;const[px,py]=pos(e);C.b=cropMove(C.st.b,C.m,px-C.st.px,py-C.st.py,cv.width,cv.height,C.asp);cropDraw()};
+ cv.onpointerup=cv.onpointercancel=()=>{C.m=null}}
+function cropOk(){const C=CR,cv=$('#crc'),b=C.b,kx=C.src.width/cv.width,ky=C.src.height/cv.height,sx=b.x*kx,sy=b.y*ky,sw=b.w*kx,sh=b.h*ky,o=C.opt,m=Math.min(1,o.max/Math.max(sw,sh)),out=document.createElement('canvas');
+ out.width=Math.max(1,Math.round(sw*m));out.height=Math.max(1,Math.round(sh*m));const x=out.getContext('2d');if(o.white){x.fillStyle='#fff';x.fillRect(0,0,out.width,out.height)}
+ x.drawImage(C.src,sx,sy,sw,sh,0,0,out.width,out.height);closeM();C.done(out.toDataURL(o.png?'image/png':'image/jpeg',.92))}
+const cropOpt=k=>({max:k=='logo'?800:600,png:k=='logo',white:k=='assin'});
+function cfgImg(k,f){cropImg(f,cropOpt(k),d=>{(db.cfg=db.cfg||{})[k]=d;save();render();toast('Imagem salva')})}
+function cfgEdit(k){cropImg((db.cfg||{})[k],cropOpt(k),d=>{db.cfg[k]=d;save();render();toast('Imagem salva')})}
+function Vcfg0(){const c={...CFG0,...db.cfg};return`<div class="bar"><h1>Minha oficina</h1><span class="sp"></span><button class="pr" onclick="editCfg()">Editar dados</button></div><p class="muted">Estes dados aparecem no cabeçalho e no rodapé dos PDFs.</p><div class="card"><b>${e(c.nome||'Preencha os dados da oficina')}</b><br>${[c.razao,c.cnpj,c.end,c.cidade,c.email&&'E-mail: '+c.email,c.tel1&&'Telefone: '+c.tel1,c.tel2&&'Telefone: '+c.tel2,c.pix&&'Chave PIX ('+(c.pixtipo||'Telefone')+'): '+c.pix,c.pixnome&&'Favorecido: '+c.pixnome].filter(Boolean).map(x=>e(x)).join('<br>')}</div><div class="g2">${[['logo','Logotipo'],['assin','Assinatura']].map(([k,l])=>`<div class="card"><b>${l}</b><div style="margin:8px 0">${c[k]?`<img src="${c[k]}" alt="${l}" style="max-height:80px;max-width:100%;background:#fff">`:'<span class="muted">Nenhuma imagem.</span>'}</div><label class="btn sm" style="margin:0">${c[k]?'Trocar':'Enviar'} imagem<input type="file" accept="image/*" class="fi" onchange="toast('Processando foto...');cfgImg('${k}',this.files[0]);this.value=''"></label>${c[k]?` <button class="sm" onclick="cfgEdit('${k}')">Editar / cortar</button>`:''}</div>`).join('')}</div>`}
 /* ---------- Estoque ---------- */
 const PR=()=>db.prods=db.prods||[],MV=()=>db.movs=db.movs||[];
 const qty=id=>MV().reduce((a,m)=>a+(m.pid==id?(m.tipo=='E'?1:-1)*m.q:0),0);
@@ -351,6 +396,7 @@ function Vprod(){const p=prod(S.id);if(!p.id)return Vstock();
 /* ---------- PDFs (padrão profissional de oficina) ---------- */
 /* ---------- PDFs (padrão profissional de oficina) ---------- */
 /* ---------- PDFs (padrão profissional de oficina) ---------- */
+/* ---------- PDFs (padrão profissional de oficina) ---------- */
 const fname=(p,o)=>`${p}-OS-${o.num}-${(cl(o.cli).nome||'cliente').replace(/[^\w]+/g,'_')}`;
 const PC={dk:[21,33,43],ac:[245,183,0],ln:[214,220,226],bg:[246,248,250],mu:[100,112,124],tx:[21,33,43],wh:[255,255,255],lt:[190,200,210]};
 const ext=v=>{v=Math.round((+v||0)*100);const rs=Math.floor(v/100),ct=v%100,
@@ -370,9 +416,10 @@ function mkDoc(title,num,meta){
  Z.need=h=>{if(Z.y+h>278){d.addPage();Z.y=22;return 1}return 0};
  Z.img=(s,x,yy,mw,mh)=>{try{const p=d.getImageProperties(s),k=Math.min(mw/p.width,mh/p.height);d.addImage(s,p.fileType,x,yy,p.width*k,p.height*k);return p.height*k}catch(er){return 0}};
  /* cabeçalho */
- const hx=c.logo?M+29:M,inf=[[c.razao,c.cnpj&&'CNPJ '+c.cnpj],[c.end,c.cidade],[c.tel1,c.tel2,c.email]].map(a=>a.filter(Boolean).join('  ·  ')).filter(Boolean).flatMap(s=>lines(s,128-hx,8.5)),HB=Math.max(40,22+inf.length*4.2+5);
+ let lw=0,lh=0;if(c.logo){try{const p=d.getImageProperties(c.logo),k=Math.min(40/p.width,26/p.height);lw=p.width*k;lh=p.height*k}catch(er){}}
+ const hx=lw?M+lw+10:M,inf=[[c.razao,c.cnpj&&'CNPJ '+c.cnpj],[c.end,c.cidade],[c.tel1,c.tel2,c.email]].map(a=>a.filter(Boolean).join('  ·  ')).filter(Boolean).flatMap(s=>lines(s,128-hx,8.5)),HB=Math.max(40,22+inf.length*4.2+5,lh+16);
  d.setFillColor(...PC.dk);d.rect(0,0,W,HB,'F');d.setFillColor(...PC.ac);d.rect(0,HB,W,1.8,'F');
- if(c.logo){d.setFillColor(255,255,255);d.roundedRect(M,8,24,24,2,2,'F');Z.img(c.logo,M+1.5,9.5,21,21)}
+ if(lw){const ly=(HB-lh-4)/2;d.setFillColor(255,255,255);d.roundedRect(M,ly,lw+4,lh+4,2,2,'F');Z.img(c.logo,M+2,ly+2,lw,lh)}
  tx(c.nome,hx,16,{b:1,s:17,c:PC.wh});inf.forEach((t,i)=>tx(t,hx,22+i*4.2,{s:8.5,c:PC.lt}));
  tx(title,W-M,17,{b:1,s:16,c:PC.ac,a:'right'});tx(num,W-M,24,{b:1,s:11,c:PC.wh,a:'right'});
  (meta||[]).filter(Boolean).slice(0,3).forEach((s,i)=>tx(s,W-M,29.5+i*4.6,{s:8.5,c:PC.lt,a:'right'}));
