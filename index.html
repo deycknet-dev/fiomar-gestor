@@ -342,22 +342,25 @@ function cropMove(o,m,dx,dy,W,H,a){const MIN=30;
   if(n.x<-.5||n.y<-.5||n.x+n.w>W+.5||n.y+n.h>H+.5||n.w<MIN||n.h<MIN)return o}
  return n}
 function cropImg(file,opt,done){if(!file)return;
- const go=url=>{const i=new Image();i.onload=()=>{const k=Math.min(1,1600/Math.max(i.width,i.height)),src=document.createElement('canvas');src.width=Math.round(i.width*k);src.height=Math.round(i.height*k);src.getContext('2d').drawImage(i,0,0,src.width,src.height);CR={src,opt,done,asp:0,m:null};cropOpen()};i.onerror=()=>toast('Não consegui abrir a imagem');i.src=url};
+ const go=url=>{const i=new Image();i.onload=()=>{const k=Math.min(1,1600/Math.max(i.width,i.height)),src=document.createElement('canvas');src.width=Math.round(i.width*k);src.height=Math.round(i.height*k);src.getContext('2d').drawImage(i,0,0,src.width,src.height);CR={src,opt,done,sh:'free',asp:0,round:0,b:null,m:null};cropOpen()};i.onerror=()=>toast('Não consegui abrir a imagem');i.src=url};
  if(typeof file=='string')return go(file);const r=new FileReader();r.onload=()=>go(r.result);r.readAsDataURL(file)}
 function cropOpen(){const C=CR,s=Math.min((innerWidth-56)/C.src.width,Math.min(innerHeight*.48,460)/C.src.height,4),w=Math.round(C.src.width*s),h=Math.round(C.src.height*s);
  $('#modal').innerHTML=`<div class="ov"><div class="md"><h2 style="margin-top:0">Ajustar imagem</h2><p class="muted" style="margin:0 0 10px">Arraste os cantos ou as bordas para escolher a área. Arraste por dentro para mover.</p><div style="display:flex;justify-content:center"><canvas id="crc" width="${w}" height="${h}" style="touch-action:none;max-width:100%;background:#8a949c;border-radius:6px"></canvas></div>
- <div class="bar" style="margin:10px 0">${[[0,'Livre'],[1,'1:1'],[4/3,'4:3'],[16/9,'16:9'],[3,'3:1']].map(([a,n])=>`<button type="button" class="sm" data-a="${a}" onclick="cropAsp(${a})">${n}</button>`).join('')}<button type="button" class="sm" onclick="cropRot()">Girar</button><button type="button" class="sm" onclick="cropAsp(0,1)">Imagem inteira</button></div>
+ <div class="bar" style="margin:10px 0">${[['free','Livre'],['sq','Quadrado'],['round','Redondo'],['43','4:3'],['169','16:9'],['31','3:1']].map(([k,n])=>`<button type="button" class="sm" data-k="${k}" onclick="cropShape('${k}')">${n}</button>`).join('')}<button type="button" class="sm" onclick="cropRot()">Girar</button><button type="button" class="sm" onclick="cropShape('free',1)">Imagem inteira</button></div>
  <div class="bar" style="margin:6px 0 0"><button type="button" onclick="closeM()">Cancelar</button><span class="sp"></span><button type="button" class="pr" onclick="cropOk()">Cortar e salvar</button></div></div></div>`;
- cropBind();cropAsp(C.asp)}
-function cropAsp(a,all){const C=CR,cv=$('#crc'),W=cv.width,H=cv.height;C.asp=all?0:a;let bw=W,bh=H;
- if(C.asp){bw=Math.min(W,H*C.asp);bh=bw/C.asp;bw*=.9;bh*=.9}
- C.b={x:(W-bw)/2,y:(H-bh)/2,w:bw,h:bh};
- document.querySelectorAll('#crc ~ .bar [data-a],.md [data-a]').forEach(b=>b.classList.toggle('pr',+b.dataset.a==C.asp));cropDraw()}
+ C.b=null;cropBind();cropShape(C.sh)}
+const SH={free:[0,0],sq:[1,0],round:[1,1],'43':[4/3,0],'169':[16/9,0],'31':[3,0]};
+function cropShape(k,all){const C=CR,cv=$('#crc'),W=cv.width,H=cv.height;C.sh=k;[C.asp,C.round]=SH[k];
+ if(C.asp){let bw=Math.min(W,H*C.asp),bh=bw/C.asp;bw*=.9;bh*=.9;C.b={x:(W-bw)/2,y:(H-bh)/2,w:bw,h:bh}}
+ else if(all||!C.b)C.b={x:0,y:0,w:W,h:H};
+ document.querySelectorAll('.md [data-k]').forEach(b=>b.classList.toggle('pr',b.dataset.k==k&&!all));cropDraw()}
 function cropRot(){const C=CR,s=C.src,n=document.createElement('canvas');n.width=s.height;n.height=s.width;const x=n.getContext('2d');x.translate(n.width,0);x.rotate(Math.PI/2);x.drawImage(s,0,0);C.src=n;cropOpen()}
 function cropDraw(){const C=CR,cv=$('#crc');if(!cv)return;const x=cv.getContext('2d'),w=cv.width,h=cv.height,b=C.b;
- x.clearRect(0,0,w,h);x.drawImage(C.src,0,0,w,h);x.fillStyle='rgba(0,0,0,.55)';x.fillRect(0,0,w,b.y);x.fillRect(0,b.y+b.h,w,h-b.y-b.h);x.fillRect(0,b.y,b.x,b.h);x.fillRect(b.x+b.w,b.y,w-b.x-b.w,b.h);
+ x.clearRect(0,0,w,h);x.drawImage(C.src,0,0,w,h);x.fillStyle='rgba(0,0,0,.55)';
+ if(C.round){x.beginPath();x.rect(0,0,w,h);x.ellipse(b.x+b.w/2,b.y+b.h/2,b.w/2,b.h/2,0,0,Math.PI*2);x.fill('evenodd')}
+ else{x.fillRect(0,0,w,b.y);x.fillRect(0,b.y+b.h,w,h-b.y-b.h);x.fillRect(0,b.y,b.x,b.h);x.fillRect(b.x+b.w,b.y,w-b.x-b.w,b.h)}
  x.strokeStyle='rgba(255,255,255,.5)';x.lineWidth=1;x.beginPath();for(let i=1;i<3;i++){x.moveTo(b.x+b.w*i/3,b.y);x.lineTo(b.x+b.w*i/3,b.y+b.h);x.moveTo(b.x,b.y+b.h*i/3);x.lineTo(b.x+b.w,b.y+b.h*i/3)}x.stroke();
- x.strokeStyle='#fff';x.lineWidth=2;x.strokeRect(b.x,b.y,b.w,b.h);x.fillStyle='#fff';x.strokeStyle='#15212B';x.lineWidth=1;
+ x.strokeStyle='#fff';x.lineWidth=2;if(C.round){x.beginPath();x.ellipse(b.x+b.w/2,b.y+b.h/2,b.w/2,b.h/2,0,0,Math.PI*2);x.stroke()}else x.strokeRect(b.x,b.y,b.w,b.h);x.fillStyle='#fff';x.strokeStyle='#15212B';x.lineWidth=1;
  [[b.x,b.y],[b.x+b.w,b.y],[b.x,b.y+b.h],[b.x+b.w,b.y+b.h],[b.x+b.w/2,b.y],[b.x+b.w/2,b.y+b.h],[b.x,b.y+b.h/2],[b.x+b.w,b.y+b.h/2]].forEach(([px,py])=>{x.fillRect(px-6,py-6,12,12);x.strokeRect(px-6,py-6,12,12)})}
 function cropBind(){const C=CR,cv=$('#crc'),T=24,pos=e=>{const r=cv.getBoundingClientRect();return[(e.clientX-r.left)*cv.width/r.width,(e.clientY-r.top)*cv.height/r.height]};
  cv.onpointerdown=e=>{const[px,py]=pos(e),b=C.b,nr=(a,v)=>Math.abs(a-v)<T,inX=px>b.x-T&&px<b.x+b.w+T,inY=py>b.y-T&&py<b.y+b.h+T;let m='';
@@ -367,13 +370,16 @@ function cropBind(){const C=CR,cv=$('#crc'),T=24,pos=e=>{const r=cv.getBoundingC
   if(!m)return;C.m=m;C.st={px,py,b:{...b}};cv.setPointerCapture(e.pointerId);e.preventDefault()};
  cv.onpointermove=e=>{if(!C.m)return;const[px,py]=pos(e);C.b=cropMove(C.st.b,C.m,px-C.st.px,py-C.st.py,cv.width,cv.height,C.asp);cropDraw()};
  cv.onpointerup=cv.onpointercancel=()=>{C.m=null}}
-function cropOk(){const C=CR,cv=$('#crc'),b=C.b,kx=C.src.width/cv.width,ky=C.src.height/cv.height,sx=b.x*kx,sy=b.y*ky,sw=b.w*kx,sh=b.h*ky,o=C.opt,m=Math.min(1,o.max/Math.max(sw,sh)),out=document.createElement('canvas');
+function cropOk(){const C=CR,cv=$('#crc'),b=C.b,kx=C.src.width/cv.width,ky=C.src.height/cv.height,sx=b.x*kx,sy=b.y*ky,sw=b.w*kx,sh=b.h*ky,o=C.opt,rd=C.round,m=Math.min(1,o.max/Math.max(sw,sh)),out=document.createElement('canvas');
  out.width=Math.max(1,Math.round(sw*m));out.height=Math.max(1,Math.round(sh*m));const x=out.getContext('2d');if(o.white){x.fillStyle='#fff';x.fillRect(0,0,out.width,out.height)}
- x.drawImage(C.src,sx,sy,sw,sh,0,0,out.width,out.height);closeM();C.done(out.toDataURL(o.png?'image/png':'image/jpeg',.92))}
+ if(rd){x.save();x.beginPath();x.ellipse(out.width/2,out.height/2,out.width/2,out.height/2,0,0,Math.PI*2);x.clip()}
+ x.drawImage(C.src,sx,sy,sw,sh,0,0,out.width,out.height);if(rd)x.restore();
+ closeM();C.done(out.toDataURL(o.png||(rd&&!o.white)?'image/png':'image/jpeg',.92),rd)}
 const cropOpt=k=>({max:k=='logo'?800:600,png:k=='logo',white:k=='assin'});
-function cfgImg(k,f){cropImg(f,cropOpt(k),d=>{(db.cfg=db.cfg||{})[k]=d;save();render();toast('Imagem salva')})}
-function cfgEdit(k){cropImg((db.cfg||{})[k],cropOpt(k),d=>{db.cfg[k]=d;save();render();toast('Imagem salva')})}
-function Vcfg0(){const c={...CFG0,...db.cfg};return`<div class="bar"><h1>Minha oficina</h1><span class="sp"></span><button class="pr" onclick="editCfg()">Editar dados</button></div><p class="muted">Estes dados aparecem no cabeçalho e no rodapé dos PDFs.</p><div class="card"><b>${e(c.nome||'Preencha os dados da oficina')}</b><br>${[c.razao,c.cnpj,c.end,c.cidade,c.email&&'E-mail: '+c.email,c.tel1&&'Telefone: '+c.tel1,c.tel2&&'Telefone: '+c.tel2,c.pix&&'Chave PIX ('+(c.pixtipo||'Telefone')+'): '+c.pix,c.pixnome&&'Favorecido: '+c.pixnome].filter(Boolean).map(x=>e(x)).join('<br>')}</div><div class="g2">${[['logo','Logotipo'],['assin','Assinatura']].map(([k,l])=>`<div class="card"><b>${l}</b><div style="margin:8px 0">${c[k]?`<img src="${c[k]}" alt="${l}" style="max-height:80px;max-width:100%;background:#fff">`:'<span class="muted">Nenhuma imagem.</span>'}</div><label class="btn sm" style="margin:0">${c[k]?'Trocar':'Enviar'} imagem<input type="file" accept="image/*" class="fi" onchange="toast('Processando foto...');cfgImg('${k}',this.files[0]);this.value=''"></label>${c[k]?` <button class="sm" onclick="cfgEdit('${k}')">Editar / cortar</button>`:''}</div>`).join('')}</div>`}
+const cfgSet=(k,d,rd)=>{const c=db.cfg=db.cfg||{};c[k]=d;if(k=='logo')c.logoRound=!!rd;save();render();toast('Imagem salva')};
+function cfgImg(k,f){cropImg(f,cropOpt(k),(d,rd)=>cfgSet(k,d,rd))}
+function cfgEdit(k){cropImg((db.cfg||{})[k],cropOpt(k),(d,rd)=>cfgSet(k,d,rd))}
+function Vcfg0(){const c={...CFG0,...db.cfg};return`<div class="bar"><h1>Minha oficina</h1><span class="sp"></span><button class="pr" onclick="editCfg()">Editar dados</button></div><p class="muted">Estes dados aparecem no cabeçalho e no rodapé dos PDFs.</p><div class="card"><b>${e(c.nome||'Preencha os dados da oficina')}</b><br>${[c.razao,c.cnpj,c.end,c.cidade,c.email&&'E-mail: '+c.email,c.tel1&&'Telefone: '+c.tel1,c.tel2&&'Telefone: '+c.tel2,c.pix&&'Chave PIX ('+(c.pixtipo||'Telefone')+'): '+c.pix,c.pixnome&&'Favorecido: '+c.pixnome].filter(Boolean).map(x=>e(x)).join('<br>')}</div><div class="g2">${[['logo','Logotipo'],['assin','Assinatura']].map(([k,l])=>`<div class="card"><b>${l}</b><div style="margin:8px 0">${c[k]?`<img src="${c[k]}" alt="${l}" style="max-height:80px;max-width:100%;${k=='logo'&&c.logoRound?'border-radius:50%':'background:#fff'}">`:'<span class="muted">Nenhuma imagem.</span>'}</div><label class="btn sm" style="margin:0">${c[k]?'Trocar':'Enviar'} imagem<input type="file" accept="image/*" class="fi" onchange="toast('Processando foto...');cfgImg('${k}',this.files[0]);this.value=''"></label>${c[k]?` <button class="sm" onclick="cfgEdit('${k}')">Editar / cortar</button>`:''}</div>`).join('')}</div>`}
 /* ---------- Estoque ---------- */
 const PR=()=>db.prods=db.prods||[],MV=()=>db.movs=db.movs||[];
 const qty=id=>MV().reduce((a,m)=>a+(m.pid==id?(m.tipo=='E'?1:-1)*m.q:0),0);
@@ -393,6 +399,8 @@ function Vstock(){const q=(S.f.q||'').toLowerCase(),L=PR().filter(p=>((p.nome||'
  return`<div class="bar"><h1>Estoque</h1><span class="sp"></span><button class="pr" onclick="editProd()">Nova peça</button></div><div class="tiles" style="margin-bottom:12px">${T(PR().length,'Peças cadastradas')}${T(low,'Com estoque baixo')}${T(R(val),'Valor em estoque (custo)')}</div><input placeholder="Buscar por nome, código ou categoria" value="${e(S.f.q)}" oninput="S.f.q=this.value;render(1)" style="margin-bottom:12px">`+(L.map(p=>`<div class="row" onclick="go('prod','${p.id}')"><div>${e(p.nome)}<small>${e(p.cod)} ${e(p.cat)} - venda ${R(p.preco)}</small></div><div class="r"><span class="p" style="--c:${isLow(p)?'#B4472E':'#2E8B57'}">${qty(p.id)} ${e(p.un)}</span><button class="sm" onclick="event.stopPropagation();mov('${p.id}','E')">Entrada</button><button class="sm" onclick="event.stopPropagation();mov('${p.id}','S')">Saída</button></div></div>`).join('')||'<p class="muted">Nenhuma peça. Toque em “Nova peça” para cadastrar.</p>')}
 function Vprod(){const p=prod(S.id);if(!p.id)return Vstock();
  return`<div class="bar"><button onclick="go('stock')">Voltar</button><h1>${e(p.nome)}</h1><span class="sp"></span><span class="p" style="--c:${isLow(p)?'#B4472E':'#2E8B57'}">${qty(p.id)} ${e(p.un)} em estoque</span></div><div class="card"><div class="g2"><div><span class="muted">Código</span><br>${e(p.cod)||'-'}</div><div><span class="muted">Categoria</span><br>${e(p.cat)||'-'}</div><div style="margin-top:8px"><span class="muted">Custo / venda</span><br>${R(p.custo)} / ${R(p.preco)}</div><div style="margin-top:8px"><span class="muted">Estoque mínimo</span><br>${p.min||0}</div></div></div><div class="bar"><button class="pr" onclick="mov('${p.id}','E')">Registrar entrada</button><button onclick="mov('${p.id}','S')">Registrar saída</button><button onclick="editProd('${p.id}')">Editar</button></div><h2>Movimentações</h2>`+(MV().filter(m=>m.pid==p.id).slice().reverse().map(m=>`<div class="row" style="cursor:default"><div>${m.tipo=='E'?'Entrada':'Saída'}<small>${D(m.data)} ${e(m.obs)}</small></div><div class="r"><span class="p" style="--c:${m.tipo=='E'?'#2E8B57':'#B4472E'}">${m.tipo=='E'?'+':'-'}${m.q}</span></div></div>`).join('')||'<p class="muted">Sem movimentações.</p>')}
+/* ---------- PDFs (padrão profissional de oficina) ---------- */
+/* ---------- PDFs (padrão profissional de oficina) ---------- */
 /* ---------- PDFs (padrão profissional de oficina) ---------- */
 /* ---------- PDFs (padrão profissional de oficina) ---------- */
 /* ---------- PDFs (padrão profissional de oficina) ---------- */
@@ -419,7 +427,7 @@ function mkDoc(title,num,meta){
  let lw=0,lh=0;if(c.logo){try{const p=d.getImageProperties(c.logo),k=Math.min(40/p.width,26/p.height);lw=p.width*k;lh=p.height*k}catch(er){}}
  const hx=lw?M+lw+10:M,inf=[[c.razao,c.cnpj&&'CNPJ '+c.cnpj],[c.end,c.cidade],[c.tel1,c.tel2,c.email]].map(a=>a.filter(Boolean).join('  ·  ')).filter(Boolean).flatMap(s=>lines(s,128-hx,8.5)),HB=Math.max(40,22+inf.length*4.2+5,lh+16);
  d.setFillColor(...PC.dk);d.rect(0,0,W,HB,'F');d.setFillColor(...PC.ac);d.rect(0,HB,W,1.8,'F');
- if(lw){const ly=(HB-lh-4)/2;d.setFillColor(255,255,255);d.roundedRect(M,ly,lw+4,lh+4,2,2,'F');Z.img(c.logo,M+2,ly+2,lw,lh)}
+ if(lw){const ly=(HB-lh-4)/2;d.setFillColor(255,255,255);if(c.logoRound)d.circle(M+lw/2+2,ly+lh/2+2,Math.max(lw,lh)/2+2,'F');else d.roundedRect(M,ly,lw+4,lh+4,2,2,'F');Z.img(c.logo,M+2,ly+2,lw,lh)}
  tx(c.nome,hx,16,{b:1,s:17,c:PC.wh});inf.forEach((t,i)=>tx(t,hx,22+i*4.2,{s:8.5,c:PC.lt}));
  tx(title,W-M,17,{b:1,s:16,c:PC.ac,a:'right'});tx(num,W-M,24,{b:1,s:11,c:PC.wh,a:'right'});
  (meta||[]).filter(Boolean).slice(0,3).forEach((s,i)=>tx(s,W-M,29.5+i*4.6,{s:8.5,c:PC.lt,a:'right'}));
