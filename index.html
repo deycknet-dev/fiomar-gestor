@@ -82,12 +82,12 @@ const CK=['Lataria','Pneus','Estepe','Óleo','Água/arrefecimento','Bateria','Fa
 const FT=['Foto do veículo','Foto do defeito','Peças danificadas','Foto do scanner','Foto do osciloscópio','Antes do reparo','Depois do reparo'];
 const ST=['Aberta','Em andamento','Aguardando peças','Concluída','Entregue'];
 const FP=['Dinheiro','PIX','Cartão','Transferência','Parcelado'];
-const SC={Aberta:'#2F6FB0','Em andamento':'#C98200','Aguardando peças':'#B4472E','Concluída':'#2E8B57',Entregue:'#5B6B79',Rascunho:'#5B6B79',Aguardando:'#C98200',Aprovado:'#2E8B57',Recusado:'#B4472E'};
+const SC={Aberta:'#2F6FB0','Em andamento':'#C98200','Aguardando peças':'#B4472E','Concluída':'#2E8B57',Entregue:'#5B6B79',Rascunho:'#5B6B79',Agendado:'#C98200',Confirmado:'#2F6FB0','Concluído':'#2E8B57',Cancelado:'#B4472E',Aguardando:'#C98200',Aprovado:'#2E8B57',Recusado:'#B4472E'};
 const pill=s=>`<span class="p" style="--c:${SC[s]||'#777'}">${s=='Aguardando'?'Aguardando aprovação':s}</span>`;
 const TERMOS='Autorizo a execução dos serviços e peças descritos neste orçamento. Valores e prazo podem mudar se novos defeitos forem encontrados; nesse caso, um novo aceite será solicitado.';
 
 let db=load(),S={v:'dash',id:null,tab:'resumo',f:{},q:null};
-function load(){return{clients:[],vehicles:[],quotes:[],orders:[],seq:1,qseq:1}}
+function load(){return{clients:[],vehicles:[],quotes:[],orders:[],appts:[],svcs:[],seq:1,qseq:1}}
 /* ---------- Supabase: login e banco de dados ---------- */
 const SBK='wab_sb';let SB=null,SES=null,TS=null,PEND=false,AM='in';
 /* >>> PREENCHA AQUI UMA VEZ (Supabase: Project Settings > API). Com isso, ninguém precisa colar nada no aparelho. <<< */
@@ -251,6 +251,7 @@ function Vrecibo(){const o=od(S.id),v=vh(o.veh),c=cl(o.cli);
 
 /* ---------- Painel ---------- */
 function Vdash(){const O=db.orders,m=today().slice(0,7);
+ const t0=today(),d7=new Date(Date.now()+7*864e5-new Date().getTimezoneOffset()*60000).toISOString().slice(0,10),AT=aOrd(AG()).filter(a=>a.data==t0&&a.status!='Cancelado'),A7=AG().filter(a=>a.data>=t0&&a.data<=d7&&a.status!='Cancelado').length;
  const rec=O.reduce((a,o)=>a+Math.max(0,oTot(o)-paid(o)),0),fat=O.reduce((a,o)=>a+o.pags.filter(p=>(p.data||'').startsWith(m)).reduce((x,p)=>x+p.valor,0),0);
  const T=(n,l,f,v)=>`<div class="tile" onclick="${f}"><div class="num">${n}</div><span>${l}</span></div>`;
  const open=O.filter(o=>!['Concluída','Entregue'].includes(o.status));
@@ -260,12 +261,15 @@ function Vdash(){const O=db.orders,m=today().slice(0,7);
  ${T(open.length,'O.S. abertas',"go('orders',0,0,{st:'abertas'})")}
  ${T(O.filter(o=>o.status=='Aguardando peças').length,'Carros aguardando peças',"go('orders',0,0,{st:'Aguardando peças'})")}
  ${T(R(rec),'Contas a receber',"go('orders',0,0,{st:'receber'})")}
- ${T(R(fat),'Faturamento do mês',"go('orders')")}</div>
+ ${T(R(fat),'Faturamento do mês',"go('orders')")}
+ ${T(AT.length,'Agendamentos hoje',"go('agenda',0,0,{ag:'hoje'})")}
+ ${T(A7,'Agendamentos nos próximos 7 dias',"go('agenda')")}</div>
+ <h2>Agenda de hoje</h2>`+(AT.map(agRow).join('')||'<p class="muted">Nenhum horário marcado para hoje.</p>')+`
  <h2>Carros no pátio</h2>`+(open.map(o=>`<div class="row" onclick="go('order','${o.id}')"><div>${e(vlabel(vh(o.veh)))}<small>${e(cl(o.cli).nome)} — O.S. ${o.num}</small></div><div class="r">${pill(o.status)}</div></div>`).join('')||'<p class="muted">Nenhum carro em serviço. Crie um orçamento ou uma O.S. para começar.</p>')+
- `<p class="muted" style="margin-top:22px">Fluxo: cliente, veículo, orçamento, aprovação, O.S., checklist, laudo, fotos, pagamento, recibo e WhatsApp. Os dados ficam salvos neste navegador.</p><div class="bar"><button onclick="backup()">Copiar backup</button><button onclick="restore()">Restaurar backup</button></div>`}
+ `<p class="muted" style="margin-top:22px">Fluxo: cliente, veículo, agendamento, orçamento, aprovação, O.S., checklist, laudo, fotos, pagamento, recibo e WhatsApp. Os dados ficam salvos neste navegador.</p><div class="bar"><button onclick="backup()">Copiar backup</button><button onclick="restore()">Restaurar backup</button></div>`}
 
-function delClient(id){if(db.orders.some(o=>o.cli==id)||db.quotes.some(q=>q.cli==id))return toast('Este cliente tem orçamentos ou O.S. Exclua-os antes');db.vehicles=db.vehicles.filter(v=>v.cli!=id);db.clients=db.clients.filter(c=>c.id!=id);save();render();toast('Cliente excluído')}
-function delVeh(id){if(db.orders.some(o=>o.veh==id)||db.quotes.some(q=>q.veh==id))return toast('Este veículo tem orçamentos ou O.S. Exclua-os antes');db.vehicles=db.vehicles.filter(v=>v.id!=id);save();render();toast('Veículo excluído')}
+function delClient(id){if(db.orders.some(o=>o.cli==id)||db.quotes.some(q=>q.cli==id))return toast('Este cliente tem orçamentos ou O.S. Exclua-os antes');db.appts=AG().filter(a=>a.cli!=id);db.vehicles=db.vehicles.filter(v=>v.cli!=id);db.clients=db.clients.filter(c=>c.id!=id);save();render();toast('Cliente excluído')}
+function delVeh(id){if(db.orders.some(o=>o.veh==id)||db.quotes.some(q=>q.veh==id))return toast('Este veículo tem orçamentos ou O.S. Exclua-os antes');db.appts=AG().filter(a=>a.veh!=id);db.vehicles=db.vehicles.filter(v=>v.id!=id);save();render();toast('Veículo excluído')}
 function delQuote(){db.quotes=db.quotes.filter(x=>x.id!=S.q.id);save();toast('Orçamento excluído');go('quotes')}
 function delOS(){const id=S.id;db.orders=db.orders.filter(o=>o.id!=id);db.quotes.forEach(q=>{if(q.os==id)delete q.os});save();toast('O.S. excluída');go('orders')}
 function backup(){const t=JSON.stringify(db);const ok=()=>toast('Backup copiado ('+Math.round(t.length/1024)+' KB). Cole em um arquivo seguro.');(navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(ok,()=>modal('Backup',[['b','Copie todo o texto abaixo','area']],{b:t},()=>{}))}
@@ -407,10 +411,47 @@ async function genPDF(q){
  const name=`Orcamento-${q.n}-${(cli.nome||'cliente').replace(/[^\w]+/g,'_')}.pdf`,blob=d.output('blob');
  try{const dl=window.claude&&await claude.use('downloads');if(!dl)throw 0;await dl.save({filename:name,data:blob});toast('PDF salvo. Anexe no WhatsApp para enviar.')}catch(er){if(er&&er.code=='declined')return;dlBlob(blob,name)}
 }
-const V={dash:Vdash,clients:Vclients,vehicles:Vvehicles,quotes:Vquotes,quote:Vquote,orders:Vorders,order:Vorder,recibo:Vrecibo,cfg:Vcfg,stock:Vstock,prod:Vprod,out:()=>{doOut();return ''}};
-const NAV=[['dash','Painel'],['clients','Clientes'],['vehicles','Veículos'],['quotes','Orçamentos'],['orders','O.S.'],['stock','Estoque'],['cfg','Oficina'],['out','Sair']];
+/* ---------- Agenda ---------- */
+const AG=()=>db.appts=db.appts||[],SV=()=>db.svcs=db.svcs||[];
+const ag=id=>AG().find(x=>x.id==id)||{};
+const aOrd=l=>l.slice().sort((a,b)=>(a.data+a.hora).localeCompare(b.data+b.hora));
+const dayLbl=d=>new Date(d+'T12:00').toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'});
+const mins=h=>{const[x,y]=String(h||'0:0').split(':');return(+x||0)*60+(+y||0)};
+function waAg(id){const a=ag(id),c=cl(a.cli),v=vh(a.veh);
+ wa(c.tel,`Olá ${c.nome}! Lembrete do seu horário${a.svc?' ('+a.svc+')':''} ${a.data==today()?'hoje':'em '+dayLbl(a.data)} às ${a.hora} com seu ${v.modelo||'veículo'}.`);
+ a.aviso=today();save();render()}
+function setAg(id,st){ag(id).status=st;save();render()}
+function agOS(id){const a=ag(id);if(a.os&&od(a.os))return go('order',a.os);
+ const sv=SV().find(s=>s.nome==a.svc);
+ const o={id:uid(),num:String(db.seq++).padStart(4,'0'),cli:a.cli,veh:a.veh,problema:[a.svc,a.obs].filter(Boolean).join(' - '),mec:'',status:'Aberta',items:sv?[{t:'Serviço',d:sv.nome,det:'',q:1,v:+sv.preco||0}]:[],desc:0,ck:{},laudo:{data:today()},fotos:[],pags:[],horas:'',pecas:'',aberta:today()};
+ db.orders.push(o);a.os=o.id;save();go('order',o.id)}
+function agRow(a){const c=cl(a.cli),v=vh(a.veh);
+ return`<div class="row" style="${a.status=='Cancelado'?'opacity:.55':''}" onclick="editAg('${a.id}')"><div style="display:flex;gap:12px;align-items:center"><span class="num" style="font-size:26px;min-width:58px">${e(a.hora)}</span><div>${e(vlabel(v))}<small>${e(a.svc||'Serviço não informado')} — ${e(c.nome)}${a.aviso?' — aviso enviado em '+D(a.aviso):''}</small></div></div>
+ <div class="r">${pill(a.status)}<button class="sm wa" onclick="event.stopPropagation();waAg('${a.id}')">Avisar</button>${a.status=='Agendado'?`<button class="sm" onclick="event.stopPropagation();setAg('${a.id}','Confirmado')">Confirmar</button>`:''}${a.status!='Cancelado'?`<button class="sm ${a.os&&od(a.os)?'':'pr'}" onclick="event.stopPropagation();agOS('${a.id}')">${a.os&&od(a.os)?'Abrir O.S.':'Gerar O.S.'}</button>`:''}</div></div>`}
+function Vagenda(){const f=S.f.ag||'prox',t=today();
+ let l=aOrd(AG()).filter(a=>f=='hoje'?a.data==t:f=='ant'?a.data<t:a.data>=t);if(f=='ant')l.reverse();
+ const days={};l.forEach(a=>(days[a.data]=days[a.data]||[]).push(a));
+ const chip=(k,n)=>`<button class="sm ${f==k?'pr':''}" onclick="S.f.ag='${k}';render()">${n}</button>`;
+ return`<div class="bar"><h1>Agenda</h1><span class="sp"></span><button onclick="go('agsvc')">Serviços</button><button class="pr" onclick="editAg()">Novo agendamento</button></div>
+ <div class="bar">${chip('prox','Próximos')}${chip('hoje','Hoje')}${chip('ant','Anteriores')}</div>`+
+ (Object.entries(days).map(([d,x])=>`<h2 style="text-transform:capitalize">${e(dayLbl(d))}</h2>`+x.map(agRow).join('')).join('')||'<p class="muted">Nenhum horário neste filtro. Toque em “Novo agendamento” para marcar.</p>')}
+function editAg(id){if(!db.vehicles.length)return toast('Cadastre um cliente e um veículo primeiro');
+ const a=id?ag(id):{veh:db.vehicles[0].id,data:today(),hora:'08:00',dur:'',status:'Agendado'},cat=SV().map(s=>s.nome);
+ const sf=cat.length?['svc','Serviço','select',[['','Outro (descrever nas observações)'],...cat,...(a.svc&&!cat.includes(a.svc)?[a.svc]:[])]]:['svc','Serviço (ex.: diagnóstico com scanner)'];
+ modal(id?'Editar agendamento':'Novo agendamento',[['veh','Veículo','select',db.vehicles.map(v=>[v.id,vlabel(v)+' — '+cl(v.cli).nome])],sf,['data','Data','date',0,1],['hora','Hora','time',0,1],['dur','Duração em minutos (vazio = padrão do serviço)','number'],['status','Situação','select',['Agendado','Confirmado','Concluído','Cancelado']],['obs','Observações','area']],a,o=>{
+  o.cli=vh(o.veh).cli;o.dur=+o.dur||(SV().find(s=>s.nome==o.svc)||{}).dur||60;
+  const clash=o.status!='Cancelado'&&AG().some(x=>x.id!=id&&x.data==o.data&&x.status!='Cancelado'&&mins(x.hora)<mins(o.hora)+o.dur&&mins(o.hora)<mins(x.hora)+(x.dur||60));
+  if(id)Object.assign(a,o);else AG().push({id:uid(),...o});
+  save();render();toast(clash?'Salvo, mas o horário se sobrepõe a outro agendamento':'Agendamento salvo')},0,id&&(()=>{db.appts=AG().filter(x=>x.id!=id);save();render();toast('Agendamento excluído')}))}
+function editSvc(id){const s=id?SV().find(x=>x.id==id):{dur:60,preco:0};
+ modal(id?'Editar serviço':'Novo serviço',[['nome','Nome do serviço','text',0,1],['dur','Duração (min)','number'],['preco','Preço (R$)','number']],s,o=>{o.dur=+o.dur||60;o.preco=+o.preco||0;if(id)Object.assign(s,o);else SV().push({id:uid(),...o});save();render()},0,id&&(()=>{db.svcs=SV().filter(x=>x.id!=id);save();render();toast('Serviço excluído')}))}
+function Vagsvc(){return`<div class="bar"><button onclick="go('agenda')">Voltar</button><h1>Serviços da agenda</h1><span class="sp"></span><button class="pr" onclick="editSvc()">Novo serviço</button></div>`+
+ (SV().map(s=>`<div class="row" onclick="editSvc('${s.id}')"><div>${e(s.nome)}<small>${s.dur} min</small></div><div class="r"><b>${R(s.preco)}</b></div></div>`).join('')||'<p class="muted">Cadastre os serviços que você agenda. Ex.: Diagnóstico com scanner, Troca de óleo, Revisão de freios.</p>')}
+
+const V={dash:Vdash,agenda:Vagenda,agsvc:Vagsvc,clients:Vclients,vehicles:Vvehicles,quotes:Vquotes,quote:Vquote,orders:Vorders,order:Vorder,recibo:Vrecibo,cfg:Vcfg,stock:Vstock,prod:Vprod,out:()=>{doOut();return ''}};
+const NAV=[['dash','Painel'],['agenda','Agenda'],['clients','Clientes'],['vehicles','Veículos'],['quotes','Orçamentos'],['orders','O.S.'],['stock','Estoque'],['cfg','Oficina'],['out','Sair']];
 function render(keep){if(!SES)return authView();if(PEND)return pendView();const m=$('#main');$('#nav').style.display='';const a=document.activeElement,id=a&&a.placeholder,pos=a&&a.selectionStart;
- $('#nav').innerHTML=`<div class="logo">Fio-Mar <b>Gestor</b></div>`+NAV.map(([k,l])=>`<a class="${S.v==k||(k=='quotes'&&S.v=='quote')||(k=='orders'&&['order','recibo'].includes(S.v))||(k=='stock'&&S.v=='prod')?'on':''}" onclick="go('${k}')">${l}</a>`).join('');
+ $('#nav').innerHTML=`<div class="logo">Fio-Mar <b>Gestor</b></div>`+NAV.map(([k,l])=>`<a class="${S.v==k||(k=='quotes'&&S.v=='quote')||(k=='orders'&&['order','recibo'].includes(S.v))||(k=='stock'&&S.v=='prod')||(k=='agenda'&&S.v=='agsvc')?'on':''}" onclick="go('${k}')">${l}</a>`).join('');
  m.innerHTML=V[S.v]();document.querySelectorAll('nav a,.tabs a,.row,.tile').forEach(x=>x.tabIndex=0);
  if(keep&&id){const n=[...m.querySelectorAll('input')].find(x=>x.placeholder==id);if(n){n.focus();n.setSelectionRange(pos,pos)}}}
 window.addEventListener('error',ev=>toast('Erro: '+ev.message));
