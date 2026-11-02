@@ -3,8 +3,8 @@
 // - A página principal tenta a rede primeiro (pega atualizações) e usa o cache se estiver sem internet.
 // - Ícones e bibliotecas (PDF, Supabase, fontes) ficam em cache para abrir mais rápido.
 // Ao publicar uma versão nova, troque o número em VERSAO.
-const VERSAO = 'fiomar-v1';
-const BASE = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
+const VERSAO = 'fiomar-v2';
+const BASE = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSAO).then(c => c.addAll(BASE)).then(() => self.skipWaiting()));
