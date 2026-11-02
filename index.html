@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Fio-Mar Gestor</title>
 <link rel="manifest" href="manifest.webmanifest">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net https://tessdata.projectnaptha.com; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'">
 <meta name="theme-color" content="#15212B">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -42,6 +43,15 @@ button.dg{color:#C8553A;border-color:#C8553A}
 .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
 .tile{background:var(--sf);border:1px solid var(--ln);border-left:5px solid var(--hi);border-radius:8px;padding:12px 14px;cursor:pointer}
 .tile .num{font-size:34px;line-height:1.1}.tile span{color:var(--mut);font-size:13px}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px}
+.kpi{background:var(--sf);border:1px solid var(--ln);border-top:4px solid var(--c,var(--hi));border-radius:8px;padding:10px 14px}
+.kpi>span{display:block;color:var(--mut);font-size:12px;letter-spacing:.05em;text-transform:uppercase}
+.kpi .num{font-size:28px;line-height:1.15;margin:2px 0 4px}.kpi small{font-size:12px}
+.up{color:#2E8B57}.dn{color:#B4472E}
+.chart{width:100%;max-width:560px;height:auto;display:block;margin:0 auto}
+.cht{font-size:10.5px;fill:var(--mut)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--mut);margin-top:8px}.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px}
+@media (max-width:700px){.kpis{grid-template-columns:1fr 1fr}}
 .row{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:11px 14px;background:var(--sf);border:1px solid var(--ln);border-radius:8px;margin-bottom:8px;cursor:pointer}
 .row small{color:var(--mut);display:block}.row .r{text-align:right;display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
 .p{font-size:12px;font-weight:600;padding:2px 9px;border-radius:99px;background:color-mix(in srgb,var(--c) 18%,transparent);color:var(--c);white-space:nowrap}
@@ -82,7 +92,7 @@ main{padding:14px 14px 90px}:root{padding-bottom:0}
 <div id="modal"></div><div id="toast"></div>
 <script>
 const $=s=>document.querySelector(s);
-const e=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+const e=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 const R=n=>(+n||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const D=d=>d?d.split('-').reverse().join('/'):'';
 const today=()=>new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,10);
@@ -96,17 +106,35 @@ const pill=s=>`<span class="p" style="--c:${SC[s]||'#777'}">${s=='Aguardando'?'A
 const TERMOS='Autorizo a execução dos serviços e peças descritos neste orçamento. Valores e prazo podem mudar se novos defeitos forem encontrados; nesse caso, um novo aceite será solicitado.';
 
 let db=load(),S={v:'dash',id:null,tab:'resumo',f:{},q:null};
+const SID=x=>String(x==null?'':x).replace(/[^\w-]/g,'');
+function cleanDb(d){const A=k=>Array.isArray(d[k])?d[k]:[],S1=x=>x==null?x:SID(x),it=l=>(Array.isArray(l)?l:[]).map(i=>({...i,pid:S1(i.pid)})),fo=l=>(Array.isArray(l)?l:[]).map(f=>({...f,id:S1(f.id)}));
+ d.clients=A('clients').map(x=>({...x,id:SID(x.id)}));d.vehicles=A('vehicles').map(x=>({...x,id:SID(x.id),cli:SID(x.cli)}));
+ d.quotes=A('quotes').map(q=>({...q,id:SID(q.id),cli:SID(q.cli),veh:SID(q.veh),os:S1(q.os),items:it(q.items),fotos:fo(q.fotos)}));
+ d.orders=A('orders').map(o=>({...o,id:SID(o.id),cli:SID(o.cli),veh:SID(o.veh),qid:S1(o.qid),items:it(o.items),fotos:fo(o.fotos),pags:Array.isArray(o.pags)?o.pags:[]}));
+ d.appts=A('appts').map(a=>({...a,id:SID(a.id),cli:SID(a.cli),veh:SID(a.veh),os:S1(a.os)}));d.svcs=A('svcs').map(x=>({...x,id:SID(x.id)}));
+ d.prods=A('prods').map(x=>({...x,id:SID(x.id)}));d.movs=A('movs').map(x=>({...x,id:SID(x.id),pid:SID(x.pid)}));d.desp=A('desp').map(x=>({...x,id:SID(x.id)}));return d}
 function load(){return{clients:[],vehicles:[],quotes:[],orders:[],appts:[],svcs:[],seq:1,qseq:1}}
 /* ---------- Supabase: login e banco de dados ---------- */
 const SBK='wab_sb';let SB=null,SES=null,TS=null,PEND=false,AM='in';
 /* >>> PREENCHA AQUI UMA VEZ (Supabase: Project Settings > API). Com isso, ninguém precisa colar nada no aparelho. <<< */
 const SB_URL='https://jnlzgximqqeknrzsqxcz.supabase.co',SB_KEY='sb_publishable_jjlMojbaAok74-O4j3JkZg_At3523HK';
 const cfg0=()=>{if(SB_URL&&SB_KEY)return{url:SB_URL,key:SB_KEY};try{return JSON.parse(localStorage.getItem(SBK))||{}}catch(x){return{}}};
-async function pull(){const{data,error}=await SB.from('wab_data').select('data').eq('id',SES.user.id).maybeSingle();
+let LASTV=null,CONF=false,DIRTY=false;
+async function pull(){const{data,error}=await SB.from('wab_data').select('data,updated_at').eq('id',SES.user.id).maybeSingle();
  if(error){toast('Erro ao carregar os dados: '+error.message);return}
- db=data&&data.data&&data.data.clients?data.data:load();if(!data)await push()}
-async function push(){if(!SB||!SES||PEND)return;const{error}=await SB.from('wab_data').upsert({id:SES.user.id,data:db,updated_at:new Date().toISOString()});if(error)toast('Falha ao salvar na nuvem: '+error.message)}
-function save(){clearTimeout(TS);TS=setTimeout(push,700)}
+ db=data&&data.data&&data.data.clients?cleanDb(data.data):load();LASTV=data?data.updated_at:null;CONF=false;DIRTY=false;if(!data)await push();fixEstoque()}
+async function push(){if(!SB||!SES||PEND||CONF)return;DIRTY=false;const row={data:db,updated_at:new Date().toISOString()};
+ const q=LASTV?SB.from('wab_data').update(row).eq('id',SES.user.id).eq('updated_at',LASTV):SB.from('wab_data').upsert({id:SES.user.id,...row});
+ const{data,error}=await q.select('updated_at');
+ if(error){DIRTY=true;return toast('Falha ao salvar na nuvem: '+error.message)}
+ if(LASTV&&!(data&&data.length)){const c=await SB.from('wab_data').select('updated_at').eq('id',SES.user.id).maybeSingle();
+  if(c.data&&c.data.updated_at!=LASTV){DIRTY=true;return conflito()}DIRTY=true;return toast('Não foi possível salvar. Verifique sua conexão e permissões.')}
+ LASTV=data&&data[0]?data[0].updated_at:row.updated_at}
+function conflito(){CONF=true;$('#modal').innerHTML=`<div class="ov"><div class="md"><h2 style="margin-top:0">Dados alterados em outro aparelho</h2><p>Esta conta foi atualizada em outro aparelho ou aba depois que você abriu o app. Para não apagar o trabalho feito lá, o salvamento foi pausado.</p><p class="muted">Recomendado: recarregar os dados mais recentes. O que você alterou aqui desde a última sincronização será descartado.</p><div class="bar"><button type="button" onclick="resolveConf(0)">Manter os dados deste aparelho</button><span class="sp"></span><button type="button" class="pr" onclick="resolveConf(1)">Recarregar dados novos</button></div></div></div>`}
+async function resolveConf(reload){closeM();if(reload){await pull();render();toast('Dados atualizados')}else{const{data}=await SB.from('wab_data').select('updated_at').eq('id',SES.user.id).maybeSingle();LASTV=data?data.updated_at:null;CONF=false;await push();toast('Seus dados foram mantidos')}}
+function save(){DIRTY=true;clearTimeout(TS);TS=setTimeout(push,700)}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState=='hidden'&&DIRTY){clearTimeout(TS);push()}});
+addEventListener('pagehide',()=>{if(DIRTY){clearTimeout(TS);push()}});
 async function boot(){const c=cfg0();
  if(c.url&&c.key&&window.supabase){SB=window.supabase.createClient(c.url,c.key);const{data}=await SB.auth.getSession();if(data.session){SES=data.session;await gate();if(!PEND)await pull()}}
  render()}
@@ -117,7 +145,7 @@ function authView(){const c=cfg0();$('#nav').style.display='none';
  $('#main').innerHTML=`<div class="card" style="max-width:380px;margin:8vh auto"><h1>Fio-Mar <b style="color:var(--hi)">Gestor</b></h1>
  <div class="tabs" style="margin-top:12px"><a class="${up?'':'on'}" onclick="setMode('in')">Entrar</a><a class="${up?'on':''}" onclick="setMode('up')">Criar conta</a></div>
  ${up?`<label>Nome<input id="ln" autocomplete="name"></label>`:''}<label>E-mail<input id="le" type="email" autocomplete="username"></label>
- <label>Senha${up?' (mínimo 6 caracteres)':''}<input id="lp" type="password" autocomplete="${up?'new-password':'current-password'}" ${up?'':`onkeydown="if(event.key=='Enter')login()"`}></label>
+ <label>Senha${up?' (mínimo 8 caracteres)':''}<input id="lp" type="password" autocomplete="${up?'new-password':'current-password'}" ${up?'':`onkeydown="if(event.key=='Enter')login()"`}></label>
  ${up?`<label>Confirmar senha<input id="lp2" type="password" autocomplete="new-password" onkeydown="if(event.key=='Enter')signup()"></label>`:''}
  <p id="lerr" style="color:#C8553A;min-height:1.3em;margin:0 0 8px"></p>
  <button class="pr" style="width:100%" onclick="${up?'signup()':'login()'}">${up?'Criar conta':'Entrar'}</button>
@@ -130,7 +158,7 @@ async function resend(){const{error}=await SB.auth.resend({type:'signup',email:$
 async function loadTeam(){const el=$('#team');if(!el)return;
  const[r,m]=await Promise.all([SB.from('wab_requests').select('*'),SB.from('wab_members').select('*')]);
  const mm=m.data||[],rq=(r.data||[]).filter(x=>!mm.some(y=>y.email==x.email));
- el.innerHTML=`<h2>Pedidos de acesso</h2>`+(rq.map(x=>`<div class="row" style="cursor:default"><div>${e(x.nome||x.email)}<small>${e(x.email)}</small></div><div class="r"><button class="sm pr" onclick="aprovarReq('${e(x.email)}')">Aprovar</button><button class="sm dg" onclick="recusarReq('${e(x.email)}')">Recusar</button></div></div>`).join('')||'<p class="muted">Nenhum pedido pendente.</p>')+`<h2>Contas com acesso (assinantes)</h2>`+mm.map(x=>`<div class="row" style="cursor:default"><div>${e(x.email)}<small>${x.admin?'Administrador':'Usuário'}</small></div><div class="r">${x.email==(SES.user.email||'').toLowerCase()?'':`<button class="sm dg" onclick="confirmDel(this,()=>removeMember('${e(x.email)}'))">Remover</button>`}</div></div>`).join('')}
+ el.innerHTML=`<h2>Pedidos de acesso</h2>`+(rq.map(x=>`<div class="row" style="cursor:default"><div>${e(x.nome||x.email)}<small>${e(x.email)}</small></div><div class="r"><button class="sm pr" data-em="${e(x.email)}" onclick="aprovarReq(this.dataset.em)">Aprovar</button><button class="sm dg" data-em="${e(x.email)}" onclick="recusarReq(this.dataset.em)">Recusar</button></div></div>`).join('')||'<p class="muted">Nenhum pedido pendente.</p>')+`<h2>Contas com acesso (assinantes)</h2>`+mm.map(x=>`<div class="row" style="cursor:default"><div>${e(x.email)}<small>${x.admin?'Administrador':'Usuário'}</small></div><div class="r">${x.email==(SES.user.email||'').toLowerCase()?'':`<button class="sm dg" data-em="${e(x.email)}" onclick="confirmDel(this,()=>removeMember(this.dataset.em))">Remover</button>`}</div></div>`).join('')}
 async function aprovarReq(em){const{error}=await SB.from('wab_members').insert({email:em,admin:false});if(error)return toast('Erro: '+error.message);await SB.from('wab_requests').delete().eq('email',em);toast('Acesso liberado');loadTeam()}
 async function recusarReq(em){await SB.from('wab_requests').delete().eq('email',em);loadTeam()}
 async function removeMember(em){const{error}=await SB.from('wab_members').delete().eq('email',em);if(error)return toast('Erro: '+error.message);loadTeam()}
@@ -138,10 +166,10 @@ function Vcfg(){if(ADM)setTimeout(loadTeam,0);return Vcfg0()+(ADM?'<div id="team
 async function recheck(){await gate();if(!PEND)await pull();render();if(PEND)toast('Ainda não liberado')}
 async function signup(){const em=$('#le').value.trim(),pw=$('#lp').value,p2=$('#lp2').value,m=$('#lerr');m.style.color='#C8553A';m.textContent='';
  if(!em||!pw)return m.textContent='Informe e-mail e senha.';
- if(pw.length<6)return m.textContent='A senha precisa ter ao menos 6 caracteres.';
+ if(pw.length<8)return m.textContent='A senha precisa ter ao menos 8 caracteres.';
  if(pw!==p2)return m.textContent='As senhas não são iguais.';
  const{data,error}=await SB.auth.signUp({email:em,password:pw,options:{data:{nome:($('#ln')||{}).value||''},emailRedirectTo:location.href.split('#')[0]}});
- if(error){const t=error.message;m.textContent=/already/i.test(t)?'Este e-mail já tem conta. Use a aba Entrar.':/not allowed|disabled/i.test(t)?'O cadastro de novas contas está desativado no Supabase.':/password/i.test(t)?'Senha fraca. Use ao menos 6 caracteres.':'Erro: '+t;return}
+ if(error){const t=error.message;m.textContent=/already/i.test(t)?'Este e-mail já tem conta. Use a aba Entrar.':/not allowed|disabled/i.test(t)?'O cadastro de novas contas está desativado no Supabase.':/password/i.test(t)?'Senha fraca. Use ao menos 8 caracteres, com letras e números.':'Erro: '+t;return}
  if(data.session){SES=data.session;await gate();if(!PEND)await pull();S.v='dash';render()}
  else{m.style.color='var(--ac)';m.textContent='Conta criada. Enviamos um link de confirmação para '+em+'. Confirme o e-mail, entre e aguarde a liberação do administrador.'}}
 function saveCfg(){const url=$('#su').value.trim().replace(/\/$/,''),key=$('#sk').value.trim();if(!/^https:\/\/.+/.test(url)||key.length<20)return toast('Informe a URL e a chave anon do projeto');localStorage.setItem(SBK,JSON.stringify({url,key}));boot()}
@@ -150,7 +178,7 @@ async function login(){const em=$('#le').value.trim(),pw=$('#lp').value;$('#lerr
  const{data,error}=await SB.auth.signInWithPassword({email:em,password:pw});
  if(error){if(/not confirmed/i.test(error.message)){$('#lerr').innerHTML='Confirme o e-mail pelo link enviado antes de entrar. <a href="#" onclick="resend();return false">Reenviar e-mail</a>';return}$('#lerr').textContent=/invalid/i.test(error.message)?'E-mail ou senha incorretos.':'Erro: '+error.message;return}
  SES=data.session;await gate();if(!PEND)await pull();S.v='dash';render()}
-async function doOut(){clearTimeout(TS);await push();await SB.auth.signOut();SES=null;ADM=false;db=load();db=load();S.v='dash';render()}
+async function doOut(){clearTimeout(TS);await push();await SB.auth.signOut();SES=null;ADM=false;LASTV=null;CONF=false;DIRTY=false;db=load();S.v='dash';render()}
 function dlBlob(b,n){const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=n;document.body.appendChild(a);a.click();a.remove();toast('PDF baixado')}
 function toast(t){const o=$('#toast');o.textContent=t;o.style.display='block';setTimeout(()=>o.style.display='none',2400)}
 const cl=id=>db.clients.find(x=>x.id==id)||{};
@@ -166,7 +194,7 @@ let MD=null;
 function confirmDel(b,fn){if(b.dataset.s)return fn();b.dataset.s=1;const t=b.textContent;b.textContent='Toque de novo para confirmar';setTimeout(()=>{delete b.dataset.s;b.textContent=t},3500)}
 function modal(t,fields,vals,cb,extra,del){MD=del;
  const inp=([k,l,ty,o,r])=>`<label>${l}`+(ty=='select'?`<select name="${k}">${o.map(x=>{const[v,n]=Array.isArray(x)?x:[x,x];return`<option value="${e(v)}" ${vals[k]==v?'selected':''}>${e(n)}</option>`}).join('')}</select>`:ty=='area'?`<textarea name="${k}">${e(vals[k])}</textarea>`:`<input name="${k}" type="${ty||'text'}" ${ty=='number'?'step="any"':''} value="${e(vals[k])}" ${r?'required':''}>`)+`</label>`;
- $('#modal').innerHTML=`<div class="ov"><form class="md"><h2 style="margin-top:0">${t}</h2>${extra||''}${fields.map(inp).join('')}<div class="bar" style="margin:6px 0 0">${del?'<button type="button" class="dg" onclick="confirmDel(this,()=>{closeM();MD()})">Excluir</button>':''}<span class="sp"></span><button type="button" onclick="closeM()">Cancelar</button><button class="pr">Salvar</button></div></form></div>`;
+ $('#modal').innerHTML=`<div class="ov"><form class="md"><h2 style="margin-top:0">${e(t)}</h2>${extra||''}${fields.map(inp).join('')}<div class="bar" style="margin:6px 0 0">${del?'<button type="button" class="dg" onclick="confirmDel(this,()=>{closeM();MD()})">Excluir</button>':''}<span class="sp"></span><button type="button" onclick="closeM()">Cancelar</button><button class="pr">Salvar</button></div></form></div>`;
  $('#modal form').onsubmit=ev=>{ev.preventDefault();const o=Object.fromEntries(new FormData(ev.target));closeM();cb(o)};
 }
 const closeM=()=>$('#modal').innerHTML='';
@@ -243,12 +271,12 @@ function Vquotes(){return`<div class="bar"><h1>Orçamentos</h1><span class="sp">
 function editQuote(id){const q=id?db.quotes.find(x=>x.id==id):{id:uid(),n:db.qseq,cli:db.clients[0]?.id,veh:db.vehicles.find(x=>x.cli==db.clients[0]?.id)?.id||'',items:[],desc:0,prazo:'',obs:'',status:'Rascunho',novo:1};
  if(!q.cli)return toast('Cadastre um cliente primeiro');S.q=JSON.parse(JSON.stringify(q));go('quote')}
 function qs(k,v){S.q[k]=v;if(k=='cli'){S.q.veh=db.vehicles.find(x=>x.cli==v)?.id||'';render()}if(k=='desc')$('#qt').textContent=R(sum(S.q.items,S.q.desc))}
-function addItem(w){modal('Adicionar item',[['t','Tipo','select',['Serviço','Peça','Mão de obra']],['d','Descrição','text',0,1],['det','Detalhes (opcional)'],['q','Quantidade','number',0,1],['v','Valor unitário (R$)','number',0,1]],{q:1,t:'Serviço'},o=>{w.items.push({...o,q:+o.q,v:+o.v});save();render()})}
+function addItem(w){modal('Adicionar item',[['t','Tipo','select',['Serviço','Peça','Mão de obra']],['d','Descrição','text',0,1],['det','Detalhes (opcional)'],['q','Quantidade','number',0,1],['v','Valor unitário (R$)','number',0,1],['custo','Custo unitário (R$, opcional - usado no lucro)','number']],{q:1,t:'Serviço'},o=>{const it={...o,q:+o.q,v:+o.v};if(o.custo===''||o.custo==null)delete it.custo;else it.custo=+o.custo;w.items.push(it);save();render()})}
 function saveQuote(quiet){const q=S.q;if(!q.veh)q.veh=db.vehicles.find(v=>v.cli==q.cli)?.id||'';
  if(q.novo){delete q.novo;db.qseq++;db.quotes.push(q)}else db.quotes[db.quotes.findIndex(x=>x.id==q.id)]=q;save();if(!quiet)toast('Orçamento salvo')}
 function approve(){if(!db.vehicles.some(v=>v.cli==S.q.cli))return toast('Cadastre um veículo para este cliente');saveQuote(1);modal('Aceite do cliente',[['nome','Nome de quem aprova (assinatura)','text',0,1]],{},o=>{Object.assign(S.q,{status:'Aprovado',aprov:{nome:o.nome,data:today()}});saveQuote();render()},`<p class="muted">${TERMOS}</p>`)}
 function makeOS(){if(!db.vehicles.some(v=>v.cli==S.q.cli))return toast('Cadastre um veículo para este cliente');saveQuote(1);const q=S.q;const o={id:uid(),num:String(db.seq++).padStart(4,'0'),cli:q.cli,veh:q.veh,qid:q.id,problema:q.obs||'',mec:'',status:'Aberta',items:JSON.parse(JSON.stringify(q.items)),desc:q.desc,ck:{},laudo:{data:today()},fotos:(q.fotos||[]).map(f=>({id:uid(),t:'Foto do veículo',src:f.src,obs:f.obs})),pags:[],horas:'',pecas:'',aberta:today()};
- db.orders.push(o);q.os=o.id;saveQuote(1);go('order',o.id)}
+ db.orders.push(o);q.os=o.id;const rb=baixaOS(o);saveQuote(1);go('order',o.id);avisoBaixa(rb)}
 function wa(phone,txt){let p=String(phone||'').replace(/\D/g,'');if(!p)return toast('Cliente sem telefone cadastrado');if(p.length<=11)p='55'+p;const u=`https://wa.me/${p}?text=${encodeURIComponent(txt)}`;let w=null;try{w=window.open(u,'_blank')}catch(x){}if(!w)waFallback(u,txt)}
 let WT='';
 function waFallback(u,txt){WT=txt;$('#modal').innerHTML=`<div class="ov"><div class="md"><h2 style="margin-top:0">Enviar por WhatsApp</h2><p class="muted">O navegador bloqueou a abertura automática. Toque em “Abrir WhatsApp” ou copie a mensagem e cole na conversa.</p><textarea readonly onfocus="this.select()">${e(txt)}</textarea><div class="bar" style="margin:10px 0 0"><a class="btn" href="${u}" target="_blank" rel="noopener" style="background:#1E9E55;color:#fff;border-color:#1E9E55;text-decoration:none">Abrir WhatsApp</a><button onclick="navigator.clipboard&&navigator.clipboard.writeText(WT).then(()=>toast('Mensagem copiada'),()=>toast('Selecione o texto e copie'))">Copiar mensagem</button><span class="sp"></span><button onclick="closeM()">Fechar</button></div></div></div>`}
@@ -260,7 +288,7 @@ function Vquote(){const q=S.q,vs=db.vehicles.filter(v=>v.cli==q.cli),ro=q.status
  <label>Prazo<input value="${e(q.prazo)}" placeholder="Ex.: 3 dias úteis" onchange="qs('prazo',this.value)"></label>
  <label>Desconto (R$)<input type="number" step="any" value="${q.desc}" onchange="qs('desc',this.value)"></label></div>
  <label>Observações / problema relatado<textarea onchange="qs('obs',this.value)">${e(q.obs)}</textarea></label></div>
- <div class="card"><table><tr><th>Item</th><th class="n">Qtd</th><th class="n">Total</th><th></th></tr>${q.items.map((i,n)=>`<tr><td>${e(i.d)}<br><small class="muted">${i.t} — ${R(i.v)}</small></td><td class="n">${i.q}</td><td class="n">${R(i.q*i.v)}</td><td><button class="sm" onclick="S.q.items.splice(${n},1);render()">×</button></td></tr>`).join('')||'<tr><td colspan="4" class="muted">Adicione serviços, peças e mão de obra.</td></tr>'}</table>
+ <div class="card"><table><tr><th>Item</th><th class="n">Qtd</th><th class="n">Total</th><th></th></tr>${q.items.map((i,n)=>`<tr><td>${e(i.d)}<br><small class="muted">${e(i.t)} — ${R(i.v)}</small></td><td class="n">${i.q}</td><td class="n">${R(i.q*i.v)}</td><td><button class="sm" onclick="S.q.items.splice(${n},1);render()">×</button></td></tr>`).join('')||'<tr><td colspan="4" class="muted">Adicione serviços, peças e mão de obra.</td></tr>'}</table>
  <div class="bar" style="margin-top:10px"><button onclick="addItem(S.q)">Adicionar item</button><button onclick="addStock(S.q,0)">Peça do estoque</button><span class="sp"></span><span class="muted">Total</span><span class="tot" id="qt">${R(sum(q.items,q.desc))}</span></div></div>
  <div class="card"><div class="bar" style="margin:0 0 8px"><b>Fotos do orçamento</b><span class="sp"></span><label class="btn sm" style="margin:0">Adicionar fotos<input type="file" accept="image/*" multiple class="fi" onchange="toast('Processando foto...');qFotos([...this.files]);this.value=''"></label></div><div class="ph">${(q.fotos||[]).map((f,i)=>`<figure><img src="${f.src}" alt="Foto ${i+1}"><figcaption><input value="${e(f.obs)}" placeholder="Legenda" onchange="S.q.fotos[${i}].obs=this.value"><button class="sm" style="margin-top:4px" onclick="S.q.fotos.splice(${i},1);render()">Remover</button></figcaption></figure>`).join('')}</div></div>
  <div class="card"><b>Termos de aprovação</b><p class="muted">${TERMOS}</p>${q.aprov?`<p>Aprovado por <b>${e(q.aprov.nome)}</b> em ${D(q.aprov.data)}.</p>`:''}</div>
@@ -279,22 +307,22 @@ function pic(file,cb){const r=new FileReader();r.onload=()=>{const i=new Image()
 function ckSet(n,k,v){const o=od(S.id);(o.ck[n]=o.ck[n]||{})[k]=v;save()}
 function ckFoto(n,f){if(f)pic(f,d=>{ckSet(n,'foto',d);render()})}
 function addFotos(fs){const o=od(S.id),t=$('#ft').value;[...fs].forEach(f=>pic(f,d=>{o.fotos.push({id:uid(),t,src:d,obs:''});save();render()}))}
-function addPag(){const o=od(S.id);modal('Registrar pagamento',[['forma','Forma','select',FP],['valor','Valor pago (R$)','number',0,1],['parc','Parcelas (se parcelado)','number'],['data','Data','date',0,1]],{valor:Math.max(0,oTot(o)-paid(o)),data:today(),parc:1},p=>{o.pags.push({...p,valor:+p.valor});save();render()})}
+function addPag(){const o=od(S.id);modal('Registrar pagamento',[['forma','Forma','select',FP],['valor','Valor pago (R$)','number',0,1],['parc','Parcelas (se parcelado)','number'],['data','Data','date',0,1]],{valor:Math.max(0,oTot(o)-paid(o)),data:today(),parc:1},p=>{const v=+p.valor,rest=oTot(o)-paid(o);if(!(v>0))return toast('Informe um valor maior que zero');if(v>rest+0.005)return toast('Valor maior que o restante da O.S. ('+R(Math.max(0,rest))+')');o.pags.push({...p,valor:v});save();render()})}
 function waOS(){const o=od(S.id);wa(cl(o.cli).tel,`Olá ${cl(o.cli).nome}! O.S. ${o.num} do ${vlabel(vh(o.veh))}: status "${o.status}". Total ${R(oTot(o))}, pago ${R(paid(o))}, restante ${R(oTot(o)-paid(o))}.`)}
 function Vorder(){const o=od(S.id);if(!o)return Vorders();const T=[['resumo','Resumo'],['check','Checklist'],['laudo','Laudo'],['fotos','Fotos'],['pag','Pagamento']];
  let b='';
  if(S.tab=='resumo')b=`<div class="card"><div class="g2"><label>Mecânico responsável<input value="${e(o.mec)}" onchange="U('mec',this.value)"></label><label>Horas de mão de obra<input value="${e(o.horas)}" onchange="U('horas',this.value)"></label></div>
  <label>Problema relatado<textarea onchange="U('problema',this.value)">${e(o.problema)}</textarea></label><label>Peças utilizadas<textarea onchange="U('pecas',this.value)">${e(o.pecas)}</textarea></label></div>
- <div class="card"><b>Serviços autorizados</b><table>${o.items.map((i,n)=>`<tr><td>${e(i.d)}<br><small class="muted">${i.t}</small></td><td class="n">${i.q}x</td><td class="n">${R(i.q*i.v)}</td><td><button class="sm" onclick="rmOS(${n})">×</button></td></tr>`).join('')||'<tr><td class="muted">Nenhum item.</td></tr>'}</table>
+ <div class="card"><b>Serviços autorizados</b><table>${o.items.map((i,n)=>`<tr><td>${e(i.d)}<br><small class="muted">${e(i.t)}</small></td><td class="n">${i.q}x</td><td class="n">${R(i.q*i.v)}</td><td><button class="sm" onclick="rmOS(${n})">×</button></td></tr>`).join('')||'<tr><td class="muted">Nenhum item.</td></tr>'}</table>
  <div class="bar" style="margin-top:10px"><button onclick="addItem(od(S.id))">Adicionar item</button><button onclick="addStock(od(S.id),1)">Peça do estoque</button><button onclick="genOS(od(S.id))">Gerar PDF da O.S.</button><span class="sp"></span><span class="tot">${R(oTot(o))}</span></div></div>`;
  if(S.tab=='check')b=`<div class="bar"><button class="pr" onclick="genChecklist(od(S.id))">Gerar PDF do checklist</button></div><div class="card">${CK.map((n,i)=>{const c=o.ck[n]||{};return`<div class="ck"><b>${n}</b><select onchange="ckSet('${n}','s',this.value)">${['—','OK','Atenção','Defeito'].map(x=>`<option ${c.s==x?'selected':''}>${x}</option>`).join('')}</select><input type="text" placeholder="Observação" value="${e(c.obs)}" onchange="ckSet('${n}','obs',this.value)"><label class="btn sm" style="margin:0">${c.foto?'<img src="'+c.foto+'" height="26" alt="foto">':'Foto'}<input type="file" accept="image/*" class="fi" onchange="toast('Processando foto...');ckFoto('${n}',this.files[0])"></label></div>`}).join('')}</div>`;
  if(S.tab=='laudo'){const L=o.laudo;const t=(k,l,a)=>`<label>${l}${a?`<textarea onchange="UG('laudo','${k}',this.value)">${e(L[k])}</textarea>`:`<input value="${e(L[k])}" onchange="UG('laudo','${k}',this.value)">`}</label>`;
  b=`<div class="bar"><button class="pr" onclick="genLaudo(od(S.id))">Gerar PDF do laudo</button></div><div class="card">${t('rec','Reclamação do cliente',1)}${t('testes','Testes realizados',1)}${t('equip','Equipamentos utilizados')}${t('cod','Códigos de falha')}${t('diag','Diagnóstico',1)}${t('causa','Causa provável',1)}${t('sol','Solução recomendada',1)}<div class="g2">${t('tec','Técnico responsável')}<label>Data<input type="date" value="${L.data||''}" onchange="UG('laudo','data',this.value)"></label></div></div>`}
  if(S.tab=='fotos')b=`<div class="card"><div class="bar"><select id="ft" style="width:auto;margin:0">${FT.map(x=>`<option>${x}</option>`).join('')}</select><label class="btn pr" style="margin:0;color:var(--on)">Tirar ou enviar foto<input type="file" accept="image/*" multiple class="fi" onchange="toast('Processando foto...');addFotos([...this.files]);this.value=''"></label></div></div>
- <div class="ph">${o.fotos.map((f,i)=>`<figure><img src="${f.src}" alt="${e(f.t)}"><figcaption><b>${f.t}</b><br><input value="${e(f.obs)}" placeholder="Observação" onchange="od(S.id).fotos[${i}].obs=this.value;save()"><button class="sm" style="margin-top:4px" onclick="od(S.id).fotos.splice(${i},1);save();render()">Remover</button></figcaption></figure>`).join('')}</div>${o.fotos.length?'':'<p class="muted">As fotos ficam vinculadas a esta O.S. como prova do que foi encontrado e executado.</p>'}`;
+ <div class="ph">${o.fotos.map((f,i)=>`<figure><img src="${e(f.src)}" alt="${e(f.t)}"><figcaption><b>${e(f.t)}</b><br><input value="${e(f.obs)}" placeholder="Observação" onchange="od(S.id).fotos[${i}].obs=this.value;save()"><button class="sm" style="margin-top:4px" onclick="od(S.id).fotos.splice(${i},1);save();render()">Remover</button></figcaption></figure>`).join('')}</div>${o.fotos.length?'':'<p class="muted">As fotos ficam vinculadas a esta O.S. como prova do que foi encontrado e executado.</p>'}`;
  if(S.tab=='pag'){const rest=oTot(o)-paid(o);b=`<div class="card"><table><tr><td>Total</td><td class="n">${R(oTot(o))}</td></tr><tr><td>Valor pago</td><td class="n">${R(paid(o))}</td></tr><tr><td><b>Valor restante</b></td><td class="n"><b>${R(rest)}</b></td></tr></table>
- <div class="bar" style="margin-top:10px"><button class="pr" onclick="addPag()">Registrar pagamento</button>${o.pags.length?`<button onclick="go('recibo','${o.id}')">Gerar recibo</button>`:''}</div></div>`+o.pags.map((p,i)=>`<div class="row" style="cursor:default"><div>${p.forma}${p.forma=='Parcelado'?' em '+p.parc+'x':''}<small>${D(p.data)}</small></div><div class="r"><b>${R(p.valor)}</b><button class="sm" onclick="od(S.id).pags.splice(${i},1);save();render()">×</button></div></div>`).join('')}
- return`<div class="bar"><button onclick="go('orders')">Voltar</button><h1>O.S. ${o.num}</h1><span class="sp"></span><select style="width:auto;margin:0" onchange="U('status',this.value);render()">${ST.map(s=>`<option ${o.status==s?'selected':''}>${s}</option>`).join('')}</select></div>
+ <div class="bar" style="margin-top:10px"><button class="pr" onclick="addPag()">Registrar pagamento</button>${o.pags.length?`<button onclick="go('recibo','${o.id}')">Gerar recibo</button>`:''}</div></div>`+o.pags.map((p,i)=>`<div class="row" style="cursor:default"><div>${e(p.forma)}${p.forma=='Parcelado'?' em '+p.parc+'x':''}<small>${D(p.data)}</small></div><div class="r"><b>${R(p.valor)}</b><button class="sm" onclick="od(S.id).pags.splice(${i},1);save();render()">×</button></div></div>`).join('')}
+ return`<div class="bar"><button onclick="go('orders')">Voltar</button><h1>O.S. ${o.num}</h1><span class="sp"></span><select style="width:auto;margin:0" onchange="setSt(this.value)">${ST.map(s=>`<option ${o.status==s?'selected':''}>${s}</option>`).join('')}</select></div>
  <p style="margin:0 0 12px"><b>${e(vlabel(vh(o.veh)))}</b> <span class="muted">${e(cl(o.cli).nome)}</span> ${pill(o.status)} <button class="wa sm" onclick="waOS()">WhatsApp</button> <button class="dg sm" onclick="confirmDel(this,delOS)">Excluir O.S.</button></p>
  <div class="tabs">${T.map(([k,l])=>`<a class="${S.tab==k?'on':''}" onclick="S.tab='${k}';render()">${l}</a>`).join('')}</div>${b}`}
 
@@ -305,7 +333,7 @@ function Vrecibo(){const o=od(S.id),v=vh(o.veh),c=cl(o.cli);
  <div class="recibo"><h1>RECIBO DE PAGAMENTO</h1><p><b>${e((db.cfg||{}).nome||'Oficina')}</b><br>O.S. ${o.num} — emitido em ${D(today())}</p>
  <p>Cliente: <b>${e(c.nome)}</b> ${e(c.doc)}<br>Veículo: <b>${e(vlabel(v))}</b> ${e(v.ano)} ${e(v.cor)} — ${e(v.km)} km</p>
  <table><tr><th>Item</th><th class="n">Qtd</th><th class="n">Total</th></tr>${o.items.map(i=>`<tr><td>${e(i.d)}</td><td class="n">${i.q}</td><td class="n">${R(i.q*i.v)}</td></tr>`).join('')}${+o.desc?`<tr><td>Desconto</td><td></td><td class="n">-${R(o.desc)}</td></tr>`:''}<tr><td colspan="2"><b>Total</b></td><td class="n"><b>${R(oTot(o))}</b></td></tr></table>
- <h2>Pagamentos</h2><table>${o.pags.map(p=>`<tr><td>${D(p.data)}</td><td>${p.forma}${p.forma=='Parcelado'?' '+p.parc+'x':''}</td><td class="n">${R(p.valor)}</td></tr>`).join('')}<tr><td colspan="2"><b>Valor pago</b></td><td class="n"><b>${R(paid(o))}</b></td></tr><tr><td colspan="2">Valor restante</td><td class="n">${R(oTot(o)-paid(o))}</td></tr></table>
+ <h2>Pagamentos</h2><table>${o.pags.map(p=>`<tr><td>${D(p.data)}</td><td>${e(p.forma)}${p.forma=='Parcelado'?' '+p.parc+'x':''}</td><td class="n">${R(p.valor)}</td></tr>`).join('')}<tr><td colspan="2"><b>Valor pago</b></td><td class="n"><b>${R(paid(o))}</b></td></tr><tr><td colspan="2">Valor restante</td><td class="n">${R(oTot(o)-paid(o))}</td></tr></table>
  <p style="margin-top:40px;text-align:center">______________________________<br>${e((db.cfg||{}).nome||'Oficina')}</p></div>`}
 
 /* ---------- Painel ---------- */
@@ -330,9 +358,9 @@ function Vdash(){const O=db.orders,m=today().slice(0,7);
 function delClient(id){if(db.orders.some(o=>o.cli==id)||db.quotes.some(q=>q.cli==id))return toast('Este cliente tem orçamentos ou O.S. Exclua-os antes');db.appts=AG().filter(a=>a.cli!=id);db.vehicles=db.vehicles.filter(v=>v.cli!=id);db.clients=db.clients.filter(c=>c.id!=id);save();render();toast('Cliente excluído')}
 function delVeh(id){if(db.orders.some(o=>o.veh==id)||db.quotes.some(q=>q.veh==id))return toast('Este veículo tem orçamentos ou O.S. Exclua-os antes');db.appts=AG().filter(a=>a.veh!=id);db.vehicles=db.vehicles.filter(v=>v.id!=id);save();render();toast('Veículo excluído')}
 function delQuote(){db.quotes=db.quotes.filter(x=>x.id!=S.q.id);save();toast('Orçamento excluído');go('quotes')}
-function delOS(){const id=S.id;db.orders=db.orders.filter(o=>o.id!=id);db.quotes.forEach(q=>{if(q.os==id)delete q.os});save();toast('O.S. excluída');go('orders')}
+function delOS(){const id=S.id;(od(id).items||[]).forEach(i=>{if(i.baixa&&i.pid)MV().push({id:uid(),pid:i.pid,tipo:'E',q:+i.q||0,data:today(),obs:'Estorno O.S. '+od(id).num+' excluída'})});db.orders=db.orders.filter(o=>o.id!=id);db.quotes.forEach(q=>{if(q.os==id)delete q.os});save();toast('O.S. excluída');go('orders')}
 function backup(){const t=JSON.stringify(db);const ok=()=>toast('Backup copiado ('+Math.round(t.length/1024)+' KB). Cole em um arquivo seguro.');(navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(ok,()=>modal('Backup',[['b','Copie todo o texto abaixo','area']],{b:t},()=>{}))}
-function restore(){modal('Restaurar backup',[['b','Cole aqui o texto do backup','area']],{},o=>{try{const d=JSON.parse(o.b);if(!d.clients||!d.orders||!d.quotes||!d.vehicles)throw 0;db=d;save();render();toast('Backup restaurado')}catch(x){toast('Texto de backup inválido')}},'<p class="muted">Isto substitui todos os dados atuais.</p>')}
+function restore(){modal('Restaurar backup',[['b','Cole aqui o texto do backup','area']],{},o=>{try{const d=JSON.parse(o.b);if(!d.clients||!d.orders||!d.quotes||!d.vehicles)throw 0;db=cleanDb(d);save();render();toast('Backup restaurado')}catch(x){toast('Texto de backup inválido')}},'<p class="muted">Isto substitui todos os dados atuais.</p>')}
 const CFG0={pagto:'Dinheiro, cartão de crédito, cartão de débito, pix ou link de pagamento.',garantia:'3 meses de garantia.'};
 function qFotos(fs){S.q.fotos=S.q.fotos||[];[...fs].forEach(f=>pic(f,d=>{S.q.fotos.push({src:d,obs:''});render()}))}
 function editCfg(){const c=db.cfg||{};modal('Dados da oficina',[['nome','Nome fantasia','text',0,1],['razao','Razão social'],['cnpj','CNPJ'],['end','Endereço'],['cidade','Cidade, UF e CEP'],['email','E-mail','email'],['tel1','Telefone 1','tel'],['tel2','Telefone 2','tel'],['pixtipo','Tipo da chave PIX','select',['Telefone','CPF/CNPJ','E-mail','Chave aleatória']],['pix','Chave PIX'],['pixnome','Nome do favorecido do PIX'],['pagto','Meios de pagamento','area'],['garantia','Condições da garantia','area'],['resp','Responsável (assinatura)']],{...CFG0,...c},o=>{db.cfg={...c,...o};save();render()})}
@@ -401,16 +429,13 @@ function editProd(id){const p=id?prod(id):{};
 function mov(id,tipo){const p=prod(id),en=tipo=='E';
  modal((en?'Entrada':'Saída')+' de estoque: '+p.nome,[['q','Quantidade','number',0,1],['data','Data','date',0,1],...(en?[['custo','Custo unitário (R$, opcional)','number']]:[]),['obs',en?'Fornecedor / nota fiscal':'Motivo / O.S.']],{data:today()},o=>{const n=+o.q;if(!(n>0))return toast('Quantidade inválida');if(!en&&n>qty(id))return toast('Estoque insuficiente: restam '+qty(id));MV().push({id:uid(),pid:id,tipo,q:n,data:o.data,obs:o.obs||''});if(en&&+o.custo>0)p.custo=+o.custo;save();render();toast(en?'Entrada registrada':'Saída registrada')})}
 function addStock(w,os){if(!PR().length)return toast('Cadastre peças na aba Estoque primeiro');
- modal(os?'Peça do estoque (dá baixa)':'Peça do estoque',[['pid','Peça','select',PR().map(p=>[p.id,`${p.nome} (${qty(p.id)} ${p.un} em estoque)`])],['q','Quantidade','number',0,1]],{q:1},o=>{const p=prod(o.pid),n=+o.q;if(!(n>0))return toast('Quantidade inválida');if(os&&n>qty(p.id))return toast('Estoque insuficiente: restam '+qty(p.id));w.items.push({t:'Peça',d:p.nome,det:p.cod?'Cód. '+p.cod:'',q:n,v:p.preco||0,pid:p.id,baixa:!!os});if(os)MV().push({id:uid(),pid:p.id,tipo:'S',q:n,data:today(),obs:'O.S. '+w.num});save();render()})}
+ modal(os?'Peça do estoque (dá baixa)':'Peça do estoque',[['pid','Peça','select',PR().map(p=>[p.id,`${p.nome} (${qty(p.id)} ${p.un} em estoque)`])],['q','Quantidade','number',0,1]],{q:1},o=>{const p=prod(o.pid),n=+o.q;if(!(n>0))return toast('Quantidade inválida');if(os&&n>qty(p.id))return toast('Estoque insuficiente: restam '+qty(p.id));w.items.push({t:'Peça',d:p.nome,det:p.cod?'Cód. '+p.cod:'',q:n,v:p.preco||0,pid:p.id,custo:+p.custo||0,baixa:!!os});if(os)MV().push({id:uid(),pid:p.id,tipo:'S',q:n,data:today(),obs:'O.S. '+w.num});save();render()})}
 function rmOS(n){const o=od(S.id),i=o.items[n];if(i.baixa)MV().push({id:uid(),pid:i.pid,tipo:'E',q:i.q,data:today(),obs:'Estorno O.S. '+o.num});o.items.splice(n,1);save();render()}
 function Vstock(){const q=(S.f.q||'').toLowerCase(),L=PR().filter(p=>((p.nome||'')+(p.cod||'')+(p.cat||'')).toLowerCase().includes(q));
  const low=PR().filter(isLow).length,val=PR().reduce((a,p)=>a+Math.max(0,qty(p.id))*(+p.custo||0),0),T=(n,l)=>`<div class="tile" style="cursor:default"><div class="num">${n}</div><span>${l}</span></div>`;
  return`<div class="bar"><h1>Estoque</h1><span class="sp"></span><button class="pr" onclick="editProd()">Nova peça</button></div><div class="tiles" style="margin-bottom:12px">${T(PR().length,'Peças cadastradas')}${T(low,'Com estoque baixo')}${T(R(val),'Valor em estoque (custo)')}</div><input placeholder="Buscar por nome, código ou categoria" value="${e(S.f.q)}" oninput="S.f.q=this.value;render(1)" style="margin-bottom:12px">`+(L.map(p=>`<div class="row" onclick="go('prod','${p.id}')"><div>${e(p.nome)}<small>${e(p.cod)} ${e(p.cat)} - venda ${R(p.preco)}</small></div><div class="r"><span class="p" style="--c:${isLow(p)?'#B4472E':'#2E8B57'}">${qty(p.id)} ${e(p.un)}</span><button class="sm" onclick="event.stopPropagation();mov('${p.id}','E')">Entrada</button><button class="sm" onclick="event.stopPropagation();mov('${p.id}','S')">Saída</button></div></div>`).join('')||'<p class="muted">Nenhuma peça. Toque em “Nova peça” para cadastrar.</p>')}
 function Vprod(){const p=prod(S.id);if(!p.id)return Vstock();
  return`<div class="bar"><button onclick="go('stock')">Voltar</button><h1>${e(p.nome)}</h1><span class="sp"></span><span class="p" style="--c:${isLow(p)?'#B4472E':'#2E8B57'}">${qty(p.id)} ${e(p.un)} em estoque</span></div><div class="card"><div class="g2"><div><span class="muted">Código</span><br>${e(p.cod)||'-'}</div><div><span class="muted">Categoria</span><br>${e(p.cat)||'-'}</div><div style="margin-top:8px"><span class="muted">Custo / venda</span><br>${R(p.custo)} / ${R(p.preco)}</div><div style="margin-top:8px"><span class="muted">Estoque mínimo</span><br>${p.min||0}</div></div></div><div class="bar"><button class="pr" onclick="mov('${p.id}','E')">Registrar entrada</button><button onclick="mov('${p.id}','S')">Registrar saída</button><button onclick="editProd('${p.id}')">Editar</button></div><h2>Movimentações</h2>`+(MV().filter(m=>m.pid==p.id).slice().reverse().map(m=>`<div class="row" style="cursor:default"><div>${m.tipo=='E'?'Entrada':'Saída'}<small>${D(m.data)} ${e(m.obs)}</small></div><div class="r"><span class="p" style="--c:${m.tipo=='E'?'#2E8B57':'#B4472E'}">${m.tipo=='E'?'+':'-'}${m.q}</span></div></div>`).join('')||'<p class="muted">Sem movimentações.</p>')}
-/* ---------- PDFs (padrão profissional de oficina) ---------- */
-/* ---------- PDFs (padrão profissional de oficina) ---------- */
-/* ---------- PDFs (padrão profissional de oficina) ---------- */
 /* ---------- PDFs (padrão profissional de oficina) ---------- */
 /* ---------- PDFs (padrão profissional de oficina) ---------- */
 /* ---------- PDFs (padrão profissional de oficina) ---------- */
@@ -565,8 +590,95 @@ function editSvc(id){const s=id?SV().find(x=>x.id==id):{dur:60,preco:0};
 function Vagsvc(){return`<div class="bar"><button onclick="go('agenda')">Voltar</button><h1>Serviços da agenda</h1><span class="sp"></span><button class="pr" onclick="editSvc()">Novo serviço</button></div>`+
  (SV().map(s=>`<div class="row" onclick="editSvc('${s.id}')"><div>${e(s.nome)}<small>${s.dur} min</small></div><div class="r"><b>${R(s.preco)}</b></div></div>`).join('')||'<p class="muted">Cadastre os serviços que você agenda. Ex.: Diagnóstico com scanner, Troca de óleo, Revisão de freios.</p>')}
 
-const V={dash:Vdash,agenda:Vagenda,agsvc:Vagsvc,clients:Vclients,vehicles:Vvehicles,quotes:Vquotes,quote:Vquote,orders:Vorders,order:Vorder,recibo:Vrecibo,cfg:Vcfg,stock:Vstock,prod:Vprod,out:()=>{doOut();return ''}};
-const NAV=[['dash','Painel'],['agenda','Agenda'],['clients','Clientes'],['vehicles','Veículos'],['quotes','Orçamentos'],['orders','O.S.'],['stock','Estoque'],['cfg','Oficina'],['out','Sair']];
+/* ---------- Baixa automática de estoque ---------- */
+function baixaOS(o){let n=0;const falta=[];(o.items||[]).forEach(i=>{if(i.t!='Peça'||!i.pid||i.baixa)return;const p=prod(i.pid),q=+i.q||0;if(!p.id||q<=0)return;
+ if(q>qty(p.id))falta.push(p.nome);if(i.custo==null||i.custo==='')i.custo=+p.custo||0;
+ MV().push({id:uid(),pid:p.id,tipo:'S',q,data:today(),obs:'O.S. '+o.num});i.baixa=true;n++});return{n,falta}}
+const avisoBaixa=r=>{if(r&&r.n)toast(r.falta.length?'Estoque baixado, mas faltou: '+r.falta.join(', '):'Estoque atualizado: '+r.n+' peça(s) baixada(s)')};
+function fixEstoque(){let n=0;(db.orders||[]).forEach(o=>{n+=baixaOS(o).n});if(n){save();toast('Estoque corrigido: '+n+' peça(s) de O.S. anteriores foram baixadas')}}
+function setSt(v){const o=od(S.id);o.status=v;let r=null;if(['Concluída','Entregue'].includes(v)){if(!o.conc)o.conc=today();r=baixaOS(o)}else delete o.conc;save();render();avisoBaixa(r)}
+
+/* ---------- Finanças ---------- */
+const DP=()=>db.desp=db.desp||[];
+const CATS=['Aluguel','Energia, água e internet','Salários e pró-labore','Impostos e taxas','Ferramentas e equipamentos','Marketing','Combustível e transporte','Manutenção do espaço','Outros'];
+const ym=d=>String(d||'').slice(0,7);
+const ML=m=>['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][+m.slice(5,7)-1]+'/'+m.slice(2,4);
+const monthsBack=(end,n)=>{const y=+end.slice(0,4),m=+end.slice(5,7),r=[];for(let i=n-1;i>=0;i--){const t=new Date(y,m-1-i,1);r.push(t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0'))}return r};
+const K=n=>{n=+n||0;const a=Math.abs(n),s=n<0?'-':'';return s+(a>=1e6?(a/1e6).toFixed(1).replace('.',',')+' mi':a>=1e4?Math.round(a/1e3)+' mil':a>=1e3?(a/1e3).toFixed(1).replace('.',',')+' mil':Math.round(a))};
+const cItem=i=>i.custo!=null&&i.custo!==''?+i.custo||0:(i.pid?(+prod(i.pid).custo||0):0);
+const done=o=>['Concluída','Entregue'].includes(o.status);
+const ocMes=o=>ym(o.conc||(o.pags.length?o.pags[o.pags.length-1].data:o.aberta));
+const despMes=m=>DP().filter(x=>{const a=ym(x.data),f=x.fim?ym(x.fim):'';return x.rec=='1'?(m>=a&&(!f||m<=f)):a==m});
+function fin(m){const os=db.orders.filter(o=>done(o)&&ocMes(o)==m);let serv=0,pec=0,cPec=0,cOut=0,desc=0,sc=0;
+ os.forEach(o=>{desc+=+o.desc||0;o.items.forEach(i=>{const v=(+i.q||0)*(+i.v||0),c=(+i.q||0)*cItem(i);if(i.t=='Peça'){pec+=v;cPec+=c;if(!c)sc++}else{serv+=v;cOut+=c}})});
+ const dl=despMes(m),dsp=dl.reduce((a,x)=>a+(+x.valor||0),0),fat=serv+pec-desc,bruto=fat-cPec-cOut,rec=db.orders.reduce((a,o)=>a+o.pags.reduce((b,p)=>b+(ym(p.data)==m?+p.valor||0:0),0),0);
+ return{m,os,n:os.length,serv,pec,desc,fat,cPec,cOut,custo:cPec+cOut,bruto,dsp,dl,liq:bruto-dsp,rec,sc}}
+const aggF=ms=>{const r={n:0,serv:0,pec:0,desc:0,fat:0,cPec:0,cOut:0,custo:0,bruto:0,dsp:0,liq:0,rec:0,sc:0,os:[],cats:{}};
+ ms.forEach(m=>{const x=fin(m);['n','serv','pec','desc','fat','cPec','cOut','custo','bruto','dsp','liq','rec','sc'].forEach(k=>r[k]+=x[k]);r.os.push(...x.os);x.dl.forEach(d=>{const c=d.cat||'Outros';r.cats[c]=(r.cats[c]||0)+(+d.valor||0)})});return r};
+const FPS=[['m0','Este mês'],['m1','Mês passado'],['m3','3 meses'],['m12','12 meses'],['ano','Ano']];
+function periodo(){const f=S.f.fp||'m0',now=today().slice(0,7);let end=now,n=1;
+ if(f=='m1')end=monthsBack(now,2)[0];else if(f=='m3')n=3;else if(f=='m12')n=12;else if(f=='ano')n=+now.slice(5,7);
+ const ms=monthsBack(end,n);return{f,end,n,ms,prev:monthsBack(monthsBack(ms[0],2)[0],n)}}
+/* gráficos em SVG (sem bibliotecas) */
+const niceStep=r=>{if(!(r>0))return 1;const p=Math.pow(10,Math.floor(Math.log10(r))),f=r/p;return(f<=1?1:f<=2?2:f<=5?5:10)*p};
+const svg=(W,H,b,l)=>`<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${l}">${b}</svg>`;
+const legend=a=>'<div class="legend">'+a.map(([c,t])=>`<span><i style="background:${c}"></i>${t}</span>`).join('')+'</div>';
+function chMeses(L){const W=360,H=230,pl=36,pr=6,pt=10,pb=26,pw=W-pl-pr,ph=H-pt-pb,vals=L.flatMap(x=>[x.fat,x.bruto,x.liq]);
+ let mx=Math.max(...vals,0),mn=Math.min(...vals,0);if(mx==mn)mx=1;const st=niceStep((mx-mn)/4);mx=Math.ceil(mx/st-1e-9)*st;mn=Math.floor(mn/st+1e-9)*st;
+ const nt=Math.round((mx-mn)/st),Y=v=>pt+ph*(1-(v-mn)/(mx-mn));let g='';
+ for(let i=0;i<=nt;i++){const v=mn+i*st;g+=`<line x1="${pl}" x2="${W-pr}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" style="stroke:var(--ln)" stroke-width="${Math.abs(v)<1e-9?1.5:.6}"/><text class="cht" x="${pl-5}" y="${(Y(v)+3.5).toFixed(1)}" text-anchor="end">${K(v)}</text>`}
+ const gw=pw/L.length,bw=Math.max(3,Math.min(14,(gw-8)/3-1)),cl=['#2F6FB0','#F5B700','#2E8B57'];
+ L.forEach((x,i)=>{const cx=pl+gw*i+gw/2;[x.fat,x.bruto,x.liq].forEach((v,j)=>{const bx=cx+(j-1)*(bw+1.5)-bw/2,y0=Y(0),y1=Y(v);g+=`<rect x="${bx.toFixed(1)}" y="${Math.min(y0,y1).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1.5,Math.abs(y1-y0)).toFixed(1)}" rx="1.5" fill="${j==2&&v<0?'#B4472E':cl[j]}"/>`});
+  if(L.length<=8||i%2==L.length%2)g+=`<text class="cht" x="${cx.toFixed(1)}" y="${H-8}" text-anchor="middle">${ML(x.m)}</text>`});
+ return svg(W,H,g,'Faturamento, lucro bruto e lucro líquido por mês')+legend([['#2F6FB0','Faturamento'],['#F5B700','Lucro bruto'],['#2E8B57','Lucro líquido']])}
+function chCascata(a){const W=360,H=250,pl=8,pr=8,pt=24,pb=40,ph=H-pt-pb,pw=W-pl-pr,gw=pw/5,bw=gw*.62;let run=0;
+ const seg=[['Faturamento',a.fat,1,'#2F6FB0'],['Custos|diretos',-a.custo,0,'#B4472E'],['Lucro|bruto',a.bruto,1,'#F5B700'],['Despesas',-a.dsp,0,'#B4472E'],['Lucro|líquido',a.liq,1,a.liq>=0?'#2E8B57':'#B4472E']].map(([l,v,t,c])=>{let a0,a1;if(t){a0=0;a1=v;run=v}else{a0=run;a1=run+v;run=a1}return{l,v,c,a0,a1,end:run}});
+ const all=seg.flatMap(s=>[s.a0,s.a1,0]);let mx=Math.max(...all),mn=Math.min(...all);if(mx==mn)mx=1;const Y=v=>pt+ph*(1-(v-mn)/(mx-mn));
+ let g=`<line x1="${pl}" x2="${W-pr}" y1="${Y(0).toFixed(1)}" y2="${Y(0).toFixed(1)}" style="stroke:var(--ln)" stroke-width="1.5"/>`;
+ seg.forEach((s,i)=>{const cx=pl+gw*i+gw/2,y0=Y(s.a0),y1=Y(s.a1),top=Math.min(y0,y1);
+  g+=`<rect x="${(cx-bw/2).toFixed(1)}" y="${top.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1.5,Math.abs(y1-y0)).toFixed(1)}" rx="2" fill="${s.c}"/>`;
+  g+=`<text x="${cx.toFixed(1)}" y="${(top-6).toFixed(1)}" text-anchor="middle" style="font:600 11px 'Barlow',sans-serif;fill:var(--ink)">${K(s.v)}</text>${s.l.split('|').map((t,k)=>`<text class="cht" x="${cx.toFixed(1)}" y="${H-24+k*12}" text-anchor="middle">${t}</text>`).join('')}`;
+  if(i<4)g+=`<line x1="${(cx+bw/2).toFixed(1)}" x2="${(cx+gw-bw/2).toFixed(1)}" y1="${Y(s.end).toFixed(1)}" y2="${Y(s.end).toFixed(1)}" style="stroke:var(--mut)" stroke-width=".8" stroke-dasharray="3 3"/>`});
+ return svg(W,H,g,'Do faturamento ao lucro líquido')}
+const PAL=['#2F6FB0','#F5B700','#2E8B57','#B4472E','#8E5BD0','#17A2B8','#E67E22','#7F8C8D','#C2185B'];
+function chRosca(cats){const L=Object.entries(cats).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]),T=L.reduce((a,x)=>a+x[1],0);
+ if(!T)return'<p class="muted">Nenhuma despesa no período. Use “Nova despesa” para cadastrar aluguel, energia, salários e outros custos.</p>';
+ const r=62,C=2*Math.PI*r;let off=0,g='';L.forEach(([k,v],i)=>{const len=v/T*C;g+=`<circle cx="90" cy="90" r="${r}" fill="none" stroke="${PAL[i%PAL.length]}" stroke-width="26" stroke-dasharray="${len.toFixed(2)} ${(C-len).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}" transform="rotate(-90 90 90)"/>`;off+=len});
+ g+=`<text class="cht" x="90" y="84" text-anchor="middle">Total</text><text x="90" y="102" text-anchor="middle" style="font:600 13px 'Barlow Condensed',sans-serif;fill:var(--ink)">${R(T)}</text>`;
+ return`<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap"><svg viewBox="0 0 180 180" style="width:160px;max-width:100%" role="img" aria-label="Despesas por categoria">${g}</svg><div class="legend" style="flex-direction:column;gap:6px;flex:1;min-width:150px;margin:0">${L.map(([k,v],i)=>`<div><i style="background:${PAL[i%PAL.length]}"></i>${e(k)} <b style="color:var(--ink)">${R(v)}</b> (${Math.round(v/T*100)}%)</div>`).join('')}</div></div>`}
+function chTipo(a){const rows=[['Mão de obra',a.serv,a.serv-a.cOut],['Peças',a.pec,a.pec-a.cPec]],mx=Math.max(a.serv,a.pec,1),W=360,H=150,pw=W-4;let g='';
+ rows.forEach(([l,rv,lc],i)=>{const y=6+i*72;g+=`<text x="0" y="${y+11}" style="font:600 12px 'Barlow',sans-serif;fill:var(--ink)">${l}</text><rect x="0" y="${y+18}" width="${Math.max(3,pw*rv/mx).toFixed(1)}" height="24" rx="4" style="fill:var(--ln)"/><rect x="0" y="${y+18}" width="${Math.max(0,pw*Math.max(0,lc)/mx).toFixed(1)}" height="24" rx="4" fill="#2E8B57"/><text class="cht" x="0" y="${y+58}">Receita ${R(rv)} · Lucro ${R(lc)} · Margem ${rv?Math.round(lc/rv*100):0}%</text>`});
+ return svg(W,H,g,'Receita e lucro por tipo')+legend([['var(--ln)','Receita'],['#2E8B57','Lucro']])}
+const rowOS=o=>{const c=o.items.reduce((a,i)=>a+(+i.q||0)*cItem(i),0),f=oTot(o),l=f-c,mg=f?Math.round(l/f*100):0;
+ return`<div class="row" onclick="go('order','${o.id}')"><div>O.S. ${e(o.num)} — ${e(cl(o.cli).nome)}<small>${e(vlabel(vh(o.veh)))} · ${o.conc?D(o.conc):ML(ocMes(o))} · faturou ${R(f)} · custo ${R(c)}</small></div><div class="r"><b>${R(l)}</b><span class="p" style="--c:${l<0?'#B4472E':mg<20?'#C98200':'#2E8B57'}">${mg}%</span></div></div>`};
+const rowDesp=x=>`<div class="row" onclick="editDesp('${x.id}')"><div>${e(x.desc)}<small>${e(x.cat)} · ${x.rec=='1'?'todo mês desde '+D(x.data)+(x.fim?' até '+D(x.fim):''):D(x.data)}</small></div><div class="r"><b>${R(x.valor)}</b></div></div>`;
+function editDesp(id){const x=id?DP().find(d=>d.id==id):{data:today(),rec:'0',cat:'Outros'};
+ modal(id?'Editar despesa':'Nova despesa',[['desc','Descrição (ex.: aluguel da oficina)','text',0,1],['cat','Categoria','select',CATS],['valor','Valor (R$)','number',0,1],['data','Data (ou início, se repetir)','date',0,1],['rec','Repete todo mês?','select',[['0','Não, só uma vez'],['1','Sim, todo mês']]],['fim','Repetir até (opcional)','date']],x,o=>{
+  o.valor=+o.valor;if(!(o.valor>0))return toast('Informe um valor maior que zero');if(id)Object.assign(x,o);else DP().push({id:uid(),...o});save();render();toast('Despesa salva')},0,id&&(()=>{db.desp=DP().filter(d=>d.id!=id);save();render();toast('Despesa excluída')}))}
+function Vfin(){const P=periodo(),a=aggF(P.ms),b=aggF(P.prev),cm=(P.n<6?monthsBack(P.end,6):P.ms).map(fin),arec=db.orders.reduce((s,o)=>s+Math.max(0,oTot(o)-paid(o)),0),
+ mg=(x,y)=>y?Math.round(x/y*100):0,
+ dl=(x,y,bom)=>{if(!y)return'';const p=Math.round((x-y)/Math.abs(y)*100),up=p>=0;return`<small class="${up==!!bom?'up':'dn'}">${up?'▲':'▼'} ${Math.abs(p)}% <span class="muted">vs. anterior</span></small>`},
+ kpi=(l,v,sub,c)=>`<div class="kpi" style="--c:${c}"><span>${l}</span><div class="num">${v}</div>${sub||''}</div>`,
+ chip=([k,n])=>`<button class="sm ${P.f==k?'pr':''}" onclick="S.f.fp='${k}';render()">${n}</button>`,
+ ls=a.os.slice().sort((x,y)=>(y.conc||'').localeCompare(x.conc||'')).slice(0,10);
+ return`<div class="bar"><h1>Finanças</h1><span class="sp"></span><button class="pr" onclick="editDesp()">Nova despesa</button></div>
+ <div class="bar">${FPS.map(chip).join('')}</div>
+ <div class="kpis">${kpi('Faturamento',R(a.fat),`<small class="muted">${a.n} O.S. concluída(s) · ticket ${R(a.n?a.fat/a.n:0)}</small><br>`+dl(a.fat,b.fat,1),'#2F6FB0')}
+ ${kpi('Lucro bruto',R(a.bruto),`<small class="muted">Margem bruta ${mg(a.bruto,a.fat)}%</small><br>`+dl(a.bruto,b.bruto,1),'#F5B700')}
+ ${kpi('Despesas',R(a.dsp),'<small class="muted">Custos fixos e variáveis</small><br>'+dl(a.dsp,b.dsp,0),'#B4472E')}
+ ${kpi('Lucro líquido',R(a.liq),`<small class="muted">Margem líquida ${mg(a.liq,a.fat)}%</small><br>`+dl(a.liq,b.liq,1),a.liq>=0?'#2E8B57':'#B4472E')}
+ ${kpi('Recebido no período',R(a.rec),'<small class="muted">Pagamentos registrados</small>','#17A2B8')}
+ ${kpi('A receber',R(arec),'<small class="muted">Saldo aberto de todas as O.S.</small>','#7F8C8D')}</div>
+ ${a.sc?`<div class="card" style="border-left:5px solid #C98200"><b>Atenção:</b> ${a.sc} peça(s) vendida(s) neste período estão sem custo. O lucro pode estar maior do que o real. Informe o custo na peça (aba Estoque) ou ao adicionar o item.</div>`:''}
+ <div class="card"><b>Evolução mensal</b><p class="muted" style="margin:2px 0 8px;font-size:13px">Faturamento, lucro bruto e lucro líquido</p>${chMeses(cm)}</div>
+ <div class="card"><b>Do faturamento ao lucro líquido</b><p class="muted" style="margin:2px 0 8px;font-size:13px">Período selecionado. Lucro bruto = faturamento − custo de peças e terceiros. Lucro líquido = lucro bruto − despesas.</p>${chCascata(a)}</div>
+ <div class="g2"><div class="card"><b>Rentabilidade por tipo</b><p class="muted" style="margin:2px 0 8px;font-size:13px">Receita e lucro, antes do desconto</p>${chTipo(a)}</div>
+ <div class="card"><b>Despesas por categoria</b><p class="muted" style="margin:2px 0 8px;font-size:13px">Período selecionado</p>${chRosca(a.cats)}</div></div>
+ <h2>Lucro por O.S.</h2>`+(ls.map(rowOS).join('')||'<p class="muted">Nenhuma O.S. concluída neste período. Ao concluir uma O.S., ela entra aqui com faturamento, custo e margem.</p>')+
+ `<h2>Despesas cadastradas</h2>`+(DP().slice().sort((x,y)=>y.data.localeCompare(x.data)).map(rowDesp).join('')||'<p class="muted">Cadastre aluguel, energia, salários e outros custos para calcular o lucro líquido.</p>')}
+
+const V={dash:Vdash,fin:Vfin,agenda:Vagenda,agsvc:Vagsvc,clients:Vclients,vehicles:Vvehicles,quotes:Vquotes,quote:Vquote,orders:Vorders,order:Vorder,recibo:Vrecibo,cfg:Vcfg,stock:Vstock,prod:Vprod,out:()=>{doOut();return ''}};
+const NAV=[['dash','Painel'],['agenda','Agenda'],['clients','Clientes'],['vehicles','Veículos'],['quotes','Orçamentos'],['orders','O.S.'],['stock','Estoque'],['fin','Finanças'],['cfg','Oficina'],['out','Sair']];
 function render(keep){if(!SES)return authView();if(PEND)return pendView();const m=$('#main');$('#nav').style.display='';const a=document.activeElement,id=a&&a.placeholder,pos=a&&a.selectionStart;
  $('#nav').innerHTML=`<div class="logo">Fio-Mar <b>Gestor</b></div>`+NAVX().map(([k,l])=>`<a class="${S.v==k||(k=='quotes'&&S.v=='quote')||(k=='orders'&&['order','recibo'].includes(S.v))||(k=='stock'&&S.v=='prod')||(k=='agenda'&&S.v=='agsvc')?'on':''}" onclick="${k=='inst'?'instalarApp()':`go('${k}')`}">${l}</a>`).join('');
  m.innerHTML=V[S.v]();document.querySelectorAll('nav a,.tabs a,.row,.tile').forEach(x=>x.tabIndex=0);
@@ -578,7 +690,7 @@ let INST=null;
 const isApp=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
 const isIOS=()=>/iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platform=='MacIntel'&&navigator.maxTouchPoints>1);
 const canInstall=()=>!isApp()&&(!!INST||isIOS());
-const NAVX=()=>canInstall()?[...NAV.slice(0,-1),['inst','Instalar app'],NAV[NAV.length-1]]:NAV;
+const NAVX=()=>{const n=NAV;return canInstall()?[...n.slice(0,-1),['inst','Instalar app'],n[n.length-1]]:n};
 async function instalarApp(){
  if(INST){INST.prompt();try{await INST.userChoice}catch(x){}INST=null;render();return}
  $('#modal').innerHTML=`<div class="ov"><div class="md"><h2 style="margin-top:0">Instalar no iPhone / iPad</h2><p>1. Abra este endereço no <b>Safari</b>.<br>2. Toque em <b>Compartilhar</b> (quadrado com seta para cima).<br>3. Toque em <b>Adicionar à Tela de Início</b>.</p><p class="muted">O app abre em tela cheia, sem a barra do navegador.</p><div class="bar"><span class="sp"></span><button type="button" class="pr" onclick="closeM()">Entendi</button></div></div></div>`}
