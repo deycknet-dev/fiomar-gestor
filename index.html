@@ -25,13 +25,28 @@
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 Barlow,system-ui,sans-serif}
 h1,h2,h3,.num{font-family:"Barlow Condensed",Impact,sans-serif;font-weight:600;margin:0}
 h1{font-size:30px}h2{font-size:22px;margin:18px 0 8px}
-#app{display:flex;min-height:100vh}
-nav{width:200px;background:var(--ink);color:var(--bg);padding:20px 12px;position:sticky;top:0;height:100vh;flex-shrink:0}
-nav .logo{font:700 28px "Barlow Condensed",sans-serif;padding:0 10px 18px;letter-spacing:.5px}
-nav .logo b{color:var(--hi)}
-nav a{display:block;padding:10px;border-radius:6px;color:inherit;cursor:pointer;opacity:.75;font-weight:500}
-nav a.on{background:var(--hi);color:#15212B;opacity:1}
-main{flex:1;padding:22px;max-width:980px;min-width:0}
+#app{min-height:100vh}
+nav{position:sticky;top:0;z-index:16;background:#15212B;color:#E8EDF1;box-shadow:0 2px 12px rgba(0,0,0,.28)}
+nav::after{content:"";position:absolute;left:0;right:0;bottom:0;height:3px;background:var(--hi);opacity:.9}
+nav .nb{display:flex;align-items:center;flex-wrap:wrap;max-width:980px;margin:0 auto;padding:0 22px}
+nav .brand{display:flex;align-items:center;gap:11px;min-width:0;flex:1;padding:11px 0;cursor:pointer}
+nav .lg{width:38px;height:38px;border-radius:9px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;flex:none}
+nav .lg img{max-width:100%;max-height:100%;object-fit:contain;display:block}
+nav .lg.d{background:#22323F}nav .lg.d svg{width:22px;height:22px;stroke:var(--hi)}
+nav .bt{min-width:0}
+nav .bt b{display:block;font:700 22px/1.05 "Barlow Condensed",sans-serif;letter-spacing:.4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+nav .bt small{display:block;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--hi);margin-top:2px}
+nav .nbr{display:flex;gap:8px;align-items:center}
+nav .nbtn{display:flex;align-items:center;gap:7px;background:transparent;border:1px solid #34495C;color:#DDE5EB;border-radius:8px;padding:7px 11px;font:500 13px Barlow,sans-serif;cursor:pointer;margin:0}
+nav .nbtn:hover{background:#22323F;color:#fff}nav .nbtn svg{width:16px;height:16px}
+nav .nt{position:relative;display:flex;width:100%;overflow-x:auto;scrollbar-width:none;margin:0 -8px;padding:0 8px;-webkit-overflow-scrolling:touch}
+nav .nt::-webkit-scrollbar{display:none}
+nav svg{fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;flex:none}
+nav a{display:flex;align-items:center;gap:8px;flex:0 0 auto;padding:12px 14px 13px;color:#B2C0CB;font-weight:500;font-size:14px;cursor:pointer;border-radius:8px 8px 0 0;transition:background .15s,color .15s}
+nav a svg{width:18px;height:18px}
+nav a:hover{color:#fff;background:rgba(255,255,255,.05)}
+nav a.on{color:#fff;background:rgba(245,183,0,.12);box-shadow:inset 0 -3px 0 var(--hi)}nav a.on svg{stroke:var(--hi)}
+main{padding:22px;max-width:980px;min-width:0;margin:0 auto}
 .bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px}.bar .sp{flex:1}
 button,.btn{font:600 14px Barlow,sans-serif;border:1px solid var(--ln);background:var(--sf);color:var(--ink);padding:8px 13px;border-radius:6px;cursor:pointer;display:inline-block}
 button.pr,.btn.pr{background:var(--ac);color:var(--on);border-color:var(--ac)}
@@ -85,12 +100,11 @@ table{width:100%;border-collapse:collapse}td,th{padding:6px 4px;border-bottom:1p
 .recibo h1{text-align:center;border-bottom:3px solid #111;padding-bottom:8px;margin-bottom:14px}
 .recibo td,.recibo th{border-color:#ccc}
 .muted{color:var(--mut)}
-#toast{position:fixed;bottom:calc(76px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 16px;border-radius:6px;display:none;z-index:30}
+#toast{position:fixed;bottom:calc(22px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 16px;border-radius:6px;display:none;z-index:30}
 @media (max-width:760px){
-#app{display:block}
-nav{position:fixed;bottom:0;left:0;right:0;top:auto;width:auto;height:auto;display:flex;padding:6px 6px calc(6px + env(safe-area-inset-bottom,0px));z-index:10}
-nav .logo{display:none}nav{overflow-x:auto}nav a{flex:1 0 auto;text-align:center;padding:9px 10px;font-size:13px}
-main{padding:14px 14px 90px}:root{padding-bottom:0}
+nav .nb{padding:0 12px}nav .nbtn span{display:none}nav .nbtn{padding:8px}nav .nbtn svg{width:18px;height:18px}
+nav a{flex-direction:column;gap:3px;min-width:72px;justify-content:center;padding:9px 8px 10px;font-size:11.5px;text-align:center}nav a svg{width:22px;height:22px}
+main{padding:14px 14px 28px}:root{padding-bottom:0}
 .tiles{grid-template-columns:1fr 1fr}.g2{grid-template-columns:1fr}
 .ck{grid-template-columns:1fr 1fr}.ck input[type=text]{grid-column:1/3}
 }
@@ -737,10 +751,29 @@ function Vfin(){const P=periodo(),a=aggF(P.ms),b=aggF(P.prev),cm=(P.n<6?monthsBa
  <h2>Lucro por O.S.</h2>`+(ls.map(rowOS).join('')||'<p class="muted">Nenhuma O.S. concluída neste período. Ao concluir uma O.S., ela entra aqui com faturamento, custo e margem.</p>')+
  `<h2>Despesas cadastradas</h2>`+(DP().slice().sort((x,y)=>y.data.localeCompare(x.data)).map(rowDesp).join('')||'<p class="muted">Cadastre aluguel, energia, salários e outros custos para calcular o lucro líquido.</p>')}
 
+/* ---------- Barra superior ---------- */
+const ICO={dash:'<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>',
+agenda:'<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+clients:'<circle cx="9" cy="7" r="4"/><path d="M2 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2"/><path d="M16 3.1a4 4 0 0 1 0 7.8M22 21v-2a4 4 0 0 0-3-3.9"/>',
+vehicles:'<path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/>',
+quotes:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h8M8 9h2"/>',
+orders:'<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
+stock:'<path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
+fin:'<path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>',
+cfg:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+out:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/>',
+inst:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>'};
+const svgi=k=>`<svg viewBox="0 0 24 24" aria-hidden="true">${ICO[k]||''}</svg>`;
+function navHtml(){const L=NAVX(),c=db.cfg||{},nm=c.nome||'Fio-Mar',
+ on=k=>S.v==k||(k=='quotes'&&S.v=='quote')||(k=='orders'&&['order','recibo'].includes(S.v))||(k=='stock'&&S.v=='prod')||(k=='agenda'&&S.v=='agsvc'),
+ logo=c.logo?`<span class="lg"${c.logoRound?' style="border-radius:50%"':''}><img src="${e(c.logo)}" alt=""></span>`:`<span class="lg d">${svgi('cfg')}</span>`;
+ return`<div class="nb"><div class="brand" onclick="go('dash')">${logo}<span class="bt"><b>${e(nm)}</b><small>Gestor de oficina</small></span></div>
+ <div class="nbr">${L.some(x=>x[0]=='inst')?`<button type="button" class="nbtn" aria-label="Instalar app" onclick="instalarApp()">${svgi('inst')}<span>Instalar</span></button>`:''}<button type="button" class="nbtn" aria-label="Sair" onclick="doOut()">${svgi('out')}<span>Sair</span></button></div>
+ <div class="nt">${L.filter(x=>!['out','inst'].includes(x[0])).map(([k,l])=>`<a class="${on(k)?'on':''}" onclick="go('${k}')">${svgi(k)}<span>${l}</span></a>`).join('')}</div></div>`}
 const V={dash:Vdash,fin:Vfin,agenda:Vagenda,agsvc:Vagsvc,clients:Vclients,vehicles:Vvehicles,quotes:Vquotes,quote:Vquote,orders:Vorders,order:Vorder,recibo:Vrecibo,cfg:Vcfg,stock:Vstock,prod:Vprod,out:()=>{doOut();return ''}};
 const NAV=[['dash','Painel'],['agenda','Agenda'],['clients','Clientes'],['vehicles','Veículos'],['quotes','Orçamentos'],['orders','O.S.'],['stock','Estoque'],['fin','Finanças'],['cfg','Oficina'],['out','Sair']];
 function render(keep){if(!SES)return authView();if(PEND)return pendView();const m=$('#main');$('#nav').style.display='';const a=document.activeElement,id=a&&a.placeholder,pos=a&&a.selectionStart;
- $('#nav').innerHTML=`<div class="logo">Fio-Mar <b>Gestor</b></div>`+NAVX().map(([k,l])=>`<a class="${S.v==k||(k=='quotes'&&S.v=='quote')||(k=='orders'&&['order','recibo'].includes(S.v))||(k=='stock'&&S.v=='prod')||(k=='agenda'&&S.v=='agsvc')?'on':''}" onclick="${k=='inst'?'instalarApp()':`go('${k}')`}">${l}</a>`).join('');
+ $('#nav').innerHTML=navHtml();{const ac=$('#nav a.on'),nt=$('#nav .nt');if(ac&&nt)nt.scrollLeft=ac.offsetLeft-(nt.clientWidth-ac.offsetWidth)/2}
  m.innerHTML=V[S.v]();document.querySelectorAll('nav a,.tabs a,.row,.tile').forEach(x=>x.tabIndex=0);
  if(keep&&id){const n=[...m.querySelectorAll('input')].find(x=>x.placeholder==id);if(n){n.focus();n.setSelectionRange(pos,pos)}}}
 window.addEventListener('error',ev=>toast('Erro: '+ev.message));
