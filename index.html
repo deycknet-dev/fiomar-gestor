@@ -219,20 +219,26 @@ function cbKey(ev,i){const w=i.closest('.cb'),l=w.querySelector('.cbl');
  if(ev.key=='Escape'){l.hidden=true;return}
  if(ev.key=='ArrowDown'||ev.key=='ArrowUp'){ev.preventDefault();if(l.hidden){cbList(w,w.dataset.typed?i.value:'');l.hidden=false}const b=[...l.querySelectorAll('button[data-id]')];let n=b.findIndex(x=>x.classList.contains('on'));b.forEach(x=>x.classList.remove('on'));n=ev.key=='ArrowDown'?Math.min(b.length-1,n+1):Math.max(0,n-1);if(b[n]){b[n].classList.add('on');b[n].scrollIntoView({block:'nearest'})}return}
  if(ev.key=='Enter'&&!l.hidden){ev.preventDefault();const b=l.querySelector('button[data-id].on')||l.querySelector('button[data-id]');if(b)cbPick(b)}}
-const BUSCA=(k,l,o,r,vals)=>`<div class="lb">${l}${combo('m-'+k,{items:o.map(x=>({id:String(x[0]),t:x[1],s:nrm(x[1]+' '+(x[2]||'')+' '+(x[3]||'')),sub:x[3]||''})),value:vals[k]!=null?String(vals[k]):'',name:k,req:r,ph:'Digite para buscar...'})}</div>`;
+const toItems=o=>o.map(x=>({id:String(x[0]),t:x[1],s:nrm(x[1]+' '+(x[2]||'')+' '+(x[3]||'')),sub:x[3]||''}));
+const BUSCA=(k,l,o,r,vals,x)=>{x=x||{};const nv=x.novo?(t=>x.novo(t,modalVals())):null;
+ return`<div class="lb">${nv?`<div class="cbhd"><span>${l}</span><button type="button" class="sm" onclick="CBR['m-${k}'].novo('')">+ ${e(x.btn||'Novo')}</button></div>`:l}${combo('m-'+k,{items:toItems(o),value:vals[k]!=null?String(vals[k]):'',name:k,req:r,ph:'Digite para buscar...',novo:nv,novoTxt:x.novoTxt,pick:x.pick})}</div>`};
 /* modal genérico: campos [chave,rótulo,tipo,opções,obrigatório] */
 let MD=null;
 function confirmDel(b,fn){if(b.dataset.s)return fn();b.dataset.s=1;const t=b.textContent;b.textContent='Toque de novo para confirmar';setTimeout(()=>{delete b.dataset.s;b.textContent=t},3500)}
 function modal(t,fields,vals,cb,extra,del){MD=del;
- const inp=([k,l,ty,o,r])=>ty=='busca'?BUSCA(k,l,o,r,vals):`<label>${l}`+(ty=='select'?`<select name="${k}">${o.map(x=>{const[v,n]=Array.isArray(x)?x:[x,x];return`<option value="${e(v)}" ${vals[k]==v?'selected':''}>${e(n)}</option>`}).join('')}</select>`:ty=='area'?`<textarea name="${k}">${e(vals[k])}</textarea>`:`<input name="${k}" type="${ty||'text'}" ${ty=='number'?'step="any"':''} value="${e(vals[k])}" ${r?'required':''}>`)+`</label>`;
+ const inp=([k,l,ty,o,r,x])=>ty=='busca'?BUSCA(k,l,o,r,vals,x):`<label>${l}`+(ty=='select'?`<select name="${k}">${o.map(x=>{const[v,n]=Array.isArray(x)?x:[x,x];return`<option value="${e(v)}" ${vals[k]==v?'selected':''}>${e(n)}</option>`}).join('')}</select>`:ty=='area'?`<textarea name="${k}">${e(vals[k])}</textarea>`:`<input name="${k}" type="${ty||'text'}" ${ty=='number'?'step="any"':''} value="${e(vals[k])}" ${r?'required':''}>`)+`</label>`;
  $('#modal').innerHTML=`<div class="ov"><form class="md"><h2 style="margin-top:0">${e(t)}</h2>${extra||''}${fields.map(inp).join('')}<div class="bar" style="margin:6px 0 0">${del?'<button type="button" class="dg" onclick="confirmDel(this,()=>{closeM();MD()})">Excluir</button>':''}<span class="sp"></span><button type="button" onclick="closeM()">Cancelar</button><button class="pr">Salvar</button></div></form></div>`;
  document.querySelectorAll('#modal .cb').forEach(cbValid);
- $('#modal form').onsubmit=ev=>{ev.preventDefault();const o=Object.fromEntries(new FormData(ev.target));closeM();cb(o)};
+ $('#modal form').onsubmit=ev=>{ev.preventDefault();const o=Object.fromEntries(new FormData(ev.target));closeM(1);cb(o);voltaPai()};
 }
-const closeM=()=>$('#modal').innerHTML='';
+const RETS=[],voltaPai=()=>{const r=RETS.pop();if(r)r()},closeM=skip=>{$('#modal').innerHTML='';if(skip!==1)voltaPai()};
+const modalVals=()=>Object.fromEntries(new FormData($('#modal form')));
+/* abre um cadastro (filho) por cima da janela atual; ao salvar ou cancelar, reabre a janela de origem com o que já foi digitado */
+function viaModal(reopen,cur,openChild){let pat={};RETS.push(()=>reopen({...cur,...pat}));openChild(x=>{pat=x})}
 
 /* ---------- Clientes ---------- */
 const CF=[['nome','Nome','text',0,1],['doc','CPF/CNPJ'],['tel','Telefone/WhatsApp','tel',0,1],['end','Endereço']];
+const cliArr=()=>db.clients.map(c=>{const vs=db.vehicles.filter(v=>v.cli==c.id);return[c.id,c.nome,(c.doc||'')+' '+vs.map(v=>(v.placa||'')+' '+(v.modelo||'')).join(' '),[c.tel,vs.map(v=>v.placa).filter(Boolean).join(', ')].filter(Boolean).join(' · ')]});
 function editClient(id,cb,pre){const c=id?cl(id):{...(pre||{})};modal(id?'Editar cliente':'Novo cliente',CF,c,o=>{if(id)Object.assign(c,o);else{const n={id:uid(),...o};db.clients.push(n);if(cb)cb(n)}save();render();if(!id&&cb)toast('Cliente cadastrado')},0,id&&(()=>delClient(id)))}
 function Vclients(){const q=(S.f.q||'').toLowerCase();
  return`<div class="bar"><h1>Clientes</h1><span class="sp"></span><button class="pr" onclick="editClient()">Novo cliente</button></div>
@@ -246,9 +252,8 @@ const normPl=x=>String(x||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
 const okPl=x=>/^[A-Z]{3}\d[A-Z0-9]\d{2}$/.test(x);
 const pst=t=>{const n=$('#pst');if(n)n.textContent=t};
 const tcase=x=>String(x||'').toLowerCase().replace(/(^|[\s\/-])([a-zà-ú])/g,(m,a,b)=>a+b.toUpperCase());
-function editVeh(id,cb,pre){const v=id?vh(id):{...(pre||{})};EV=id||null;PLK='';const F=[['cli','Cliente','busca',db.clients.map(c=>[c.id,c.nome,(c.tel||'')+' '+(c.doc||'')]),1],['placa','Placa','text',0,1],['modelo','Marca/modelo','text',0,1],['ano','Ano','number'],['km','Quilometragem','number'],['motor','Motor'],['cor','Cor'],['chassi','Chassi'],['obs','Observações','area']];
- if(!db.clients.length)return toast('Cadastre um cliente primeiro');
- modal(id?'Editar veículo':'Novo veículo',F,v,o=>{o.placa=normPl(o.placa)||o.placa.toUpperCase();if(id)Object.assign(v,o);else{const n={id:uid(),...o};db.vehicles.push(n);if(cb)cb(n)}save();render();if(!id&&cb)toast('Veículo cadastrado')},0,id&&(()=>delVeh(id)));
+function editVeh(id,cb,pre){const orig=id?vh(id):null,v={...(orig||{}),...(pre||{})};EV=id||null;PLK='';const F=[['cli','Cliente','busca',cliArr(),1,{btn:'Novo cliente',novoTxt:'Cadastrar novo cliente',novo:(t,cur)=>viaModal(x=>editVeh(id,cb,x),cur,set=>editClient(null,n=>set({cli:n.id}),{nome:t}))}],['placa','Placa','text',0,1],['modelo','Marca/modelo','text',0,1],['ano','Ano','number'],['km','Quilometragem','number'],['motor','Motor'],['cor','Cor'],['chassi','Chassi'],['obs','Observações','area']];
+ modal(id?'Editar veículo':'Novo veículo',F,v,o=>{o.placa=normPl(o.placa)||o.placa.toUpperCase();if(id)Object.assign(orig,o);else{const n={id:uid(),...o};db.vehicles.push(n);if(cb)cb(n)}save();render();if(!id&&cb)toast('Veículo cadastrado')},0,id&&(()=>delVeh(id)));
  const pl=$('#modal [name=placa]');pl.setAttribute('autocapitalize','characters');pl.setAttribute('autocomplete','off');pl.maxLength=8;
  pl.closest('label').insertAdjacentHTML('afterend',`<div class="bar" style="margin:-4px 0 12px"><label class="btn sm pr" style="margin:0;color:var(--on)">Escanear placa<input type="file" accept="image/*" capture="environment" class="fi" onchange="scanPlaca(this.files[0]);this.value=''"></label><button type="button" class="sm" onclick="buscaPlaca()">Buscar dados</button><span class="muted" id="pst" style="font-size:13px"></span></div>`);
  pl.addEventListener('input',()=>{pl.value=pl.value.toUpperCase().replace(/[^A-Z0-9-]/g,'');clearTimeout(PT);if(!EV)PT=setTimeout(()=>buscaPlaca(true),700)})}
@@ -318,7 +323,7 @@ function waFallback(u,txt){WT=txt;$('#modal').innerHTML=`<div class="ov"><div cl
 function waQuote(){const q=S.q;wa(cl(q.cli).tel,`Olá ${cl(q.cli).nome}! Segue o orçamento ${q.n} do ${vlabel(vh(q.veh))}:\n${q.items.map(i=>`- ${i.d} (${i.q}x ${R(i.v)})`).join('\n')}\nTotal: ${R(sum(q.items,q.desc))}\nPrazo: ${q.prazo||'a combinar'}\nPosso confirmar a aprovação?`);if(q.status=='Rascunho'){q.status='Aguardando';saveQuote(1);render()}}
 function Vquote(){const q=S.q,vs=db.vehicles.filter(v=>v.cli==q.cli),ro=q.status=='Aprovado';
  return`<div class="bar"><button onclick="qBack()">Voltar</button><h1>Orçamento ${q.n}</h1><span class="sp"></span>${pill(q.status)}</div>
- <div class="card"><div class="g2"><div class="lb"><div class="cbhd"><span>Cliente</span><button type="button" class="sm" onclick="qNovoCli()">+ Novo cliente</button></div>${combo('q-cli',{items:db.clients.map(c=>({id:c.id,t:c.nome,s:nrm(c.nome+' '+(c.tel||'')+' '+(c.doc||'')),sub:c.tel||''})),value:q.cli,ph:'Digite o nome do cliente...',pick:id=>qs('cli',id),novo:t=>qNovoCli(t),novoTxt:'Cadastrar novo cliente'})}</div>
+ <div class="card"><div class="g2"><div class="lb"><div class="cbhd"><span>Cliente</span><button type="button" class="sm" onclick="qNovoCli()">+ Novo cliente</button></div>${combo('q-cli',{items:toItems(cliArr()),value:q.cli,ph:'Digite o nome do cliente...',pick:id=>qs('cli',id),novo:t=>qNovoCli(t),novoTxt:'Cadastrar novo cliente'})}</div>
  <div class="lb"><div class="cbhd"><span>Veículo</span><button type="button" class="sm" onclick="qNovoVeh()" ${q.cli?'':'disabled'}>+ Novo veículo</button></div><select onchange="qs('veh',this.value)" ${q.cli?'':'disabled'}>${vs.length?vs.map(v=>`<option value="${v.id}" ${v.id==q.veh?'selected':''}>${e(vlabel(v))}</option>`).join(''):`<option value="">${q.cli?'Nenhum veículo - toque em + Novo veículo':'Escolha o cliente primeiro'}</option>`}</select></div>
  <label>Prazo<input value="${e(q.prazo)}" placeholder="Ex.: 3 dias úteis" onchange="qs('prazo',this.value)"></label>
  <label>Desconto (R$)<input type="number" step="any" value="${q.desc}" onchange="qs('desc',this.value)"></label></div>
@@ -612,14 +617,24 @@ function Vagenda(){const f=S.f.ag||'prox',t=today();
  return`<div class="bar"><h1>Agenda</h1><span class="sp"></span><button onclick="go('agsvc')">Serviços</button><button class="pr" onclick="editAg()">Novo agendamento</button></div>
  <div class="bar">${chip('prox','Próximos')}${chip('hoje','Hoje')}${chip('ant','Anteriores')}</div>`+
  (Object.entries(days).map(([d,x])=>`<h2 style="text-transform:capitalize">${e(dayLbl(d))}</h2>`+x.map(agRow).join('')).join('')||'<p class="muted">Nenhum horário neste filtro. Toque em “Novo agendamento” para marcar.</p>')}
-function editAg(id){if(!db.vehicles.length)return toast('Cadastre um cliente e um veículo primeiro');
- const a=id?ag(id):{veh:'',data:today(),hora:'08:00',dur:'',status:'Agendado'},cat=SV().map(s=>s.nome);
+function editAg(id,pre){
+ const orig=id?ag(id):null,a={...(orig||{cli:'',veh:'',data:today(),hora:'08:00',dur:'',status:'Agendado'}),...(pre||{})},cat=SV().map(s=>s.nome);
  const sf=cat.length?['svc','Serviço','select',[['','Outro (descrever nas observações)'],...cat,...(a.svc&&!cat.includes(a.svc)?[a.svc]:[])]]:['svc','Serviço (ex.: diagnóstico com scanner)'];
- modal(id?'Editar agendamento':'Novo agendamento',[['veh','Veículo','busca',db.vehicles.map(v=>[v.id,vlabel(v),(cl(v.cli).nome||'')+' '+(v.cor||''),cl(v.cli).nome]),1],sf,['data','Data','date',0,1],['hora','Hora','time',0,1],['dur','Duração em minutos (vazio = padrão do serviço)','number'],['status','Situação','select',['Agendado','Confirmado','Concluído','Cancelado']],['obs','Observações','area']],a,o=>{
-  o.cli=vh(o.veh).cli;o.dur=+o.dur||(SV().find(s=>s.nome==o.svc)||{}).dur||60;
+ const vopts=c=>{const vs=db.vehicles.filter(v=>v.cli==c);return vs.length?vs.map(v=>[v.id,vlabel(v)]):[['',c?'Nenhum veículo - toque em + Novo veículo':'Escolha o cliente primeiro']]};
+ modal(id?'Editar agendamento':'Novo agendamento',[
+  ['cli','Cliente','busca',cliArr(),1,{btn:'Novo cliente',novoTxt:'Cadastrar novo cliente',pick:c=>agVeh(c),novo:(t,cur)=>viaModal(x=>editAg(id,x),cur,set=>editClient(null,n=>set({cli:n.id,veh:''}),{nome:t}))}],
+  ['veh','Veículo','select',vopts(a.cli)],sf,['data','Data','date',0,1],['hora','Hora','time',0,1],['dur','Duração em minutos (vazio = padrão do serviço)','number'],['status','Situação','select',['Agendado','Confirmado','Concluído','Cancelado']],['obs','Observações','area']],a,o=>{
+  o.cli=vh(o.veh).cli||o.cli;o.dur=+o.dur||(SV().find(s=>s.nome==o.svc)||{}).dur||60;
   const clash=o.status!='Cancelado'&&AG().some(x=>x.id!=id&&x.data==o.data&&x.status!='Cancelado'&&mins(x.hora)<mins(o.hora)+o.dur&&mins(o.hora)<mins(x.hora)+(x.dur||60));
-  if(id)Object.assign(a,o);else AG().push({id:uid(),...o});
-  save();render();toast(clash?'Salvo, mas o horário se sobrepõe a outro agendamento':'Agendamento salvo')},0,id&&(()=>{db.appts=AG().filter(x=>x.id!=id);save();render();toast('Agendamento excluído')}))}
+  if(id)Object.assign(orig,o);else AG().push({id:uid(),...o});
+  save();render();toast(clash?'Salvo, mas o horário se sobrepõe a outro agendamento':'Agendamento salvo')},0,id&&(()=>{db.appts=AG().filter(x=>x.id!=id);save();render();toast('Agendamento excluído')}));
+ const vs=$('#modal [name=veh]');vs.required=true;vs.disabled=!a.cli;
+ vs.closest('label').insertAdjacentHTML('afterend','<div class="bar" style="margin:-4px 0 12px"><button type="button" class="sm" id="agnv">+ Novo veículo</button></div>');
+ const nb=$('#agnv');nb.disabled=!a.cli;
+ nb.onclick=()=>{const cur=modalVals();viaModal(x=>editAg(id,x),cur,set=>editVeh(null,v=>set({veh:v.id,cli:v.cli}),{cli:cur.cli}))}}
+function agVeh(c){const vs=$('#modal [name=veh]'),L=db.vehicles.filter(v=>v.cli==c);
+ vs.innerHTML=L.length?L.map(v=>`<option value="${e(v.id)}">${e(vlabel(v))}</option>`).join(''):`<option value="">${c?'Nenhum veículo - toque em + Novo veículo':'Escolha o cliente primeiro'}</option>`;
+ vs.disabled=!c;$('#agnv').disabled=!c}
 function editSvc(id){const s=id?SV().find(x=>x.id==id):{dur:60,preco:0};
  modal(id?'Editar serviço':'Novo serviço',[['nome','Nome do serviço','text',0,1],['dur','Duração (min)','number'],['preco','Preço (R$)','number']],s,o=>{o.dur=+o.dur||60;o.preco=+o.preco||0;if(id)Object.assign(s,o);else SV().push({id:uid(),...o});save();render()},0,id&&(()=>{db.svcs=SV().filter(x=>x.id!=id);save();render();toast('Serviço excluído')}))}
 function Vagsvc(){return`<div class="bar"><button onclick="go('agenda')">Voltar</button><h1>Serviços da agenda</h1><span class="sp"></span><button class="pr" onclick="editSvc()">Novo serviço</button></div>`+
