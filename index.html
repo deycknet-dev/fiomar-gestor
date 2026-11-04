@@ -290,29 +290,24 @@ async function buscaPlaca(auto){const f=$('#modal form');if(!f)return;const p=no
  pst('Dados preenchidos. Confira e informe a quilometragem.')}
 /* leitura da placa pela foto (OCR roda no próprio aparelho) */
 const loadTess=()=>window.Tesseract?Promise.resolve():new Promise((ok,no)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';s.onload=ok;s.onerror=()=>no(new Error('ocr'));document.head.appendChild(s)});
-function prepImg(file,mode){return new Promise((ok,no)=>{const r=new FileReader();r.onload=()=>{const i=new Image();i.onload=()=>{const k=Math.min(1,1600/Math.max(i.width,i.height)),c=document.createElement('canvas');c.width=Math.round(i.width*k);c.height=Math.round(i.height*k);const x=c.getContext('2d');x.drawImage(i,0,0,c.width,c.height);
- const im=x.getImageData(0,0,c.width,c.height),d=im.data,g=new Float32Array(c.width*c.height);let sum=0;
- for(let p=0,q=0;p<d.length;p+=4,q++){g[q]=d[p]*.3+d[p+1]*.59+d[p+2]*.11;sum+=g[q]}
- const m=sum/g.length;
- for(let p=0,q=0;p<d.length;p+=4,q++){const v=mode?(g[q]>m*.9?255:0):Math.max(0,Math.min(255,(g[q]-m)*1.6+128));d[p]=d[p+1]=d[p+2]=v}
- x.putImageData(im,0,0);ok(c)};i.onerror=()=>no(new Error('img'));i.src=r.result};r.readAsDataURL(file)})}
-function plateFrom(txt){const t=String(txt).toUpperCase().replace(/[^A-Z0-9]/g,''),toL={0:'O',1:'I',2:'Z',4:'A',5:'S',6:'G',7:'T',8:'B'},toN={O:'0',Q:'0',D:'0',I:'1',L:'1',Z:'2',A:'4',S:'5',G:'6',T:'7',B:'8'};let best=null;
- for(let i=0;i+7<=t.length;i++){let miss=0,out='';
-  for(let j=0;j<7;j++){const c=t[i+j],L=/[A-Z]/.test(c);
-   if(j<3){if(L)out+=c;else if(toL[c]){out+=toL[c];miss++}else{miss=9;break}}
-   else if(j==4)out+=c;
-   else{if(!L)out+=c;else if(toN[c]){out+=toN[c];miss++}else{miss=9;break}}}
-  if(miss<=2&&(!best||miss<best.miss))best={p:out,miss}}
+function prepImg(file){return new Promise((ok,no)=>{const r=new FileReader();r.onload=()=>{const i=new Image();i.onload=()=>{try{
+ const k=Math.min(2.2,2400/Math.max(i.width,i.height)),c=document.createElement('canvas');c.width=Math.max(1,Math.round(i.width*k));c.height=Math.max(1,Math.round(i.height*k));
+ const x=c.getContext('2d',{willReadFrequently:true});x.imageSmoothingEnabled=true;x.imageSmoothingQuality='high';x.drawImage(i,0,0,c.width,c.height);
+ const im=x.getImageData(0,0,c.width,c.height),d=im.data,n=c.width*c.height,g=new Uint8Array(n),hist=new Uint32Array(256);let sum=0;
+ for(let p=0,q=0;p<d.length;p+=4,q++){const v=Math.round(d[p]*.299+d[p+1]*.587+d[p+2]*.114);g[q]=v;hist[v]++;sum+=v}
+ let wb=0,sb=0,best=-1,th=128;for(let t=0;t<256;t++){wb+=hist[t];if(!wb)continue;const wf=n-wb;if(!wf)break;sb+=t*hist[t];const mb=sb/wb,mf=(sum-sb)/wf,score=wb*wf*(mb-mf)*(mb-mf);if(score>best){best=score;th=t}}
+ const out=[],a=document.createElement('canvas');a.width=c.width;a.height=c.height;const ax=a.getContext('2d'),ai=ax.createImageData(c.width,c.height);
+ for(let q=0;q<n;q++){const v=Math.max(0,Math.min(255,(g[q]-128)*1.65+128)),z=q*4;ai.data[z]=ai.data[z+1]=ai.data[z+2]=v;ai.data[z+3]=255}ax.putImageData(ai,0,0);out.push(a);
+ for(const inv of [false,true]){const b=document.createElement('canvas');b.width=c.width;b.height=c.height;const bx=b.getContext('2d'),bi=bx.createImageData(c.width,c.height);for(let q=0;q<n;q++){let v=g[q]>th?255:0;if(inv)v=255-v;const z=q*4;bi.data[z]=bi.data[z+1]=bi.data[z+2]=v;bi.data[z+3]=255}bx.putImageData(bi,0,0);out.push(b)}ok(out)
+ }catch(err){no(err)}};i.onerror=()=>no(new Error('img'));i.src=r.result};r.onerror=()=>no(new Error('file'));r.readAsDataURL(file)})}
+function plateFrom(txt){const raw=String(txt||'').toUpperCase(),parts=raw.split(/\n+/).map(x=>x.replace(/[^A-Z0-9]/g,''));parts.push(raw.replace(/[^A-Z0-9]/g,''));const toL={0:'O',1:'I',2:'Z',4:'A',5:'S',6:'G',7:'T',8:'B'},toN={O:'0',Q:'0',D:'0',I:'1',L:'1',Z:'2',A:'4',S:'5',G:'6',T:'7',B:'8'};let best=null;
+ for(const t of parts)for(let i=0;i+7<=t.length;i++){let miss=0,out='';for(let j=0;j<7;j++){const c=t[i+j],letter=j<3||(j===4&&!/\d/.test(c));if(letter){if(/[A-Z]/.test(c))out+=c;else if(toL[c]){out+=toL[c];miss++}else{miss=9;break}}else{if(/\d/.test(c))out+=c;else if(toN[c]){out+=toN[c];miss++}else{miss=9;break}}}if(miss<=3&&/^[A-Z]{3}\d[A-Z0-9]\d{2}$/.test(out)&&(!best||miss<best.miss))best={p:out,miss}}
  return best}
-async function scanPlaca(file){if(!file)return;pst('Lendo a placa...');let w=null;
- try{await loadTess();w=await Tesseract.createWorker('eng');await w.setParameters({tessedit_char_whitelist:'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',tessedit_pageseg_mode:'11'});
-  let best=null;
-  for(const mode of [0,1]){const r=await w.recognize(await prepImg(file,mode)),b=plateFrom(r.data.text);if(b&&(!best||b.miss<best.miss))best=b;if(best&&best.miss==0)break}
-  if(!document.body.contains($('#pst')))return;
-  if(!best)return pst('Não consegui ler a placa. Aproxime, enquadre só a placa com boa luz, ou digite.');
-  const el=$('#modal [name=placa]');el.value=best.p;PLK='';
-  if(best.miss==0)buscaPlaca();else pst('Li "'+best.p+'". Confira a placa e toque em Buscar dados.')
- }catch(x){pst('Não foi possível ler a foto. Digite a placa.')}finally{if(w)w.terminate()}}
+async function scanPlaca(file){if(!file)return;const status=$('#pst');if(!status)return;pst('Preparando imagem para leitura...');let w=null;
+ try{await loadTess();const variants=await prepImg(file);w=await Tesseract.createWorker('eng');await w.setParameters({tessedit_char_whitelist:'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',tessedit_pageseg_mode:'11',preserve_interword_spaces:'1'});let best=null;
+ for(const img of variants){for(const psm of ['11','7','8']){await w.setParameters({tessedit_pageseg_mode:psm});const r=await w.recognize(img),b=plateFrom(r.data.text);if(b&&(!best||b.miss<best.miss))best=b;if(best&&best.miss===0)break}if(best&&best.miss===0)break}
+ if(!document.body.contains(status))return;if(!best)return pst('Não identifiquei a placa. Fotografe de frente, aproxime e evite reflexos; também pode recortar a imagem para deixar a placa maior.');const el=$('#modal [name=placa]');if(!el)return;el.value=best.p;el.dispatchEvent(new Event('input',{bubbles:true}));PLK='';if(best.miss===0){pst('Placa lida: '+best.p+'. Consultando dados...');buscaPlaca()}else pst('Leitura provável: '+best.p+'. Confira os caracteres e toque em Buscar dados.')
+ }catch(x){pst('Falha na leitura da foto. Tente outra imagem ou digite a placa.')}finally{if(w)try{await w.terminate()}catch(x){}}}
 function Vvehicles(){return`<div class="bar"><h1>Veículos</h1><span class="sp"></span><button class="pr" onclick="editVeh()">Novo veículo</button></div>`+
  (db.vehicles.map(v=>`<div class="row" onclick="editVeh('${v.id}')"><div>${e(vlabel(v))} <span class="muted">${e(v.ano)} ${e(v.cor)}</span><small>${e(cl(v.cli).nome)} — ${e(v.km)} km ${e(v.motor)}</small></div><div class="r"><button class="sm" onclick="event.stopPropagation();go('orders',0,0,{vei:'${v.id}'})">Histórico</button></div></div>`).join('')||'<p class="muted">Nenhum veículo cadastrado.</p>')}
 
