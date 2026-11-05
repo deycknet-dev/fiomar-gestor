@@ -337,10 +337,34 @@ function saveQuote(quiet){const q=S.q;if(!q.cli){if(!quiet)toast('Escolha ou cad
 function approve(){saveQuote(1);modal('Aceite do cliente',[['nome','Nome de quem aprova (assinatura)','text',0,1]],{},o=>{Object.assign(S.q,{status:'Aprovado',aprov:{nome:o.nome,data:today()}});saveQuote();render()},`<p class="muted">${TERMOS}</p>`)}
 function makeOS(){saveQuote(1);const q=S.q;const o={id:uid(),num:String(db.seq++).padStart(4,'0'),cli:q.cli,veh:q.veh,qid:q.id,problema:q.obs||'',mec:'',status:'Aberta',items:JSON.parse(JSON.stringify(q.items)),desc:q.desc,ck:{},laudo:{data:today()},fotos:(q.fotos||[]).map(f=>({id:uid(),t:'Foto do veículo',src:f.src,obs:f.obs})),pags:[],horas:'',pecas:'',aberta:today()};
  db.orders.push(o);q.os=o.id;const rb=baixaOS(o);saveQuote(1);go('order',o.id);avisoBaixa(rb)}
-function wa(phone,txt){let p=String(phone||'').replace(/\D/g,'');if(!p)return toast('Cliente sem telefone cadastrado');if(p.length<=11)p='55'+p;const u=`https://wa.me/${p}?text=${encodeURIComponent(txt)}`;let w=null;try{w=window.open(u,'_blank')}catch(x){}if(!w)waFallback(u,txt)}
+const waNum=t=>{let p=String(t||'').replace(/\D/g,'');if(p&&p.length<=11)p='55'+p;return p};
+function wa(phone,txt){const p=waNum(phone);if(!p)return toast('Cliente sem telefone cadastrado');const u=`https://wa.me/${p}?text=${encodeURIComponent(txt)}`;let w=null;try{w=window.open(u,'_blank')}catch(x){}if(!w)waFallback(u,txt)}
 let WT='';
 function waFallback(u,txt){WT=txt;$('#modal').innerHTML=`<div class="ov"><div class="md"><h2 style="margin-top:0">Enviar por WhatsApp</h2><p class="muted">O navegador bloqueou a abertura automática. Toque em “Abrir WhatsApp” ou copie a mensagem e cole na conversa.</p><textarea readonly onfocus="this.select()">${e(txt)}</textarea><div class="bar" style="margin:10px 0 0"><a class="btn" href="${u}" target="_blank" rel="noopener" style="background:#1E9E55;color:#fff;border-color:#1E9E55;text-decoration:none">Abrir WhatsApp</a><button onclick="navigator.clipboard&&navigator.clipboard.writeText(WT).then(()=>toast('Mensagem copiada'),()=>toast('Selecione o texto e copie'))">Copiar mensagem</button><span class="sp"></span><button onclick="closeM()">Fechar</button></div></div></div>`}
-function waQuote(){const q=S.q;wa(cl(q.cli).tel,`Olá ${cl(q.cli).nome}! Segue o orçamento ${q.n} do ${vlabel(vh(q.veh))}:\n${q.items.map(i=>`- ${i.d} (${i.q}x ${R(i.v)})`).join('\n')}\nTotal: ${R(sum(q.items,q.desc))}\nPrazo: ${q.prazo||'a combinar'}\nPosso confirmar a aprovação?`);if(q.status=='Rascunho'){q.status='Aguardando';saveQuote(1);render()}}
+/* ---- envio de documento em PDF pelo WhatsApp ---- */
+let WD=null;
+const empNome=()=>(db.cfg&&db.cfg.nome)||'Fio-Mar';
+const copiaTxt=t=>{try{return navigator.clipboard.writeText(t).then(()=>1,()=>0)}catch(x){return Promise.resolve(0)}};
+async function waDoc(gen,arg,phone,txt){
+ if(noLib())return false;
+ if(!waNum(phone)){toast('Cliente sem telefone cadastrado');return false}
+ toast('Gerando o PDF...');CAP={};
+ try{await gen(arg)}catch(er){CAP=null;toast('Não foi possível gerar o PDF');return false}
+ const r=CAP;CAP=null;if(!r.blob)return false;
+ WD={blob:r.blob,name:r.name,phone:waNum(phone),txt};
+ waDocModal();return true}
+function waDocModal(msg){const w=WD;if(!w)return;const u=`https://wa.me/${w.phone}?text=${encodeURIComponent(w.txt)}`;
+ const can=(()=>{try{return navigator.canShare&&navigator.canShare({files:[new File([w.blob],w.name,{type:'application/pdf'})]})}catch(x){return 0}})();
+ $('#modal').innerHTML=`<div class="ov"><div class="md"><h2 style="margin-top:0">PDF pronto para enviar</h2>${msg?`<p style="color:var(--dg,#c0392b)">${e(msg)}</p>`:''}<p class="muted">${can?'<b>1.</b> Toque em “Enviar PDF” e escolha o WhatsApp e o cliente. A mensagem fica copiada: se não aparecer no envio, cole no campo de texto.':'Baixe o PDF, abra a conversa do cliente e anexe o arquivo (clipe).'}</p><textarea readonly onfocus="this.select()">${e(w.txt)}</textarea><div class="bar" style="margin:10px 0 0">${can?'<button class="pr" onclick="waDocShare()">Enviar PDF</button>':''}<a class="btn" href="${u}" target="_blank" rel="noopener" style="background:#1E9E55;color:#fff;border-color:#1E9E55;text-decoration:none">Abrir conversa com a mensagem</a><button onclick="dlBlob(WD.blob,WD.name)">Baixar PDF</button><button onclick="copiaTxt(WD.txt).then(k=>toast(k?'Mensagem copiada':'Selecione o texto e copie'))">Copiar mensagem</button><span class="sp"></span><button onclick="closeM()">Fechar</button></div></div></div>`}
+async function waDocShare(){const w=WD;if(!w)return;const f=new File([w.blob],w.name,{type:'application/pdf'});
+ copiaTxt(w.txt);
+ try{await navigator.share({files:[f],text:w.txt,title:w.name});closeM();return}
+ catch(er){if(er&&er.name=='AbortError')return;
+  try{await navigator.share({files:[f]});closeM();return}
+  catch(e2){if(e2&&e2.name=='AbortError')return;waDocModal('Não foi possível abrir o compartilhamento ('+((e2&&e2.name)||'erro')+'). Use Baixar PDF e anexe no WhatsApp.')}}}
+async function waQuote(){const q=S.q;if(!q.cli)return toast('Escolha ou cadastre o cliente');saveQuote(1);const c=cl(q.cli),v=q.veh?vlabel(vh(q.veh)):'';
+ const ok=await waDoc(genPDF,q,c.tel,`Olá, ${c.nome}! Tudo bem?\n\nEsse documento é o orçamento do serviço${v?' do seu '+v:''}, Nº ${q.n}.\nValor total: ${R(sum(q.items,q.desc))}${q.prazo?'\nPrazo: '+q.prazo:''}\n\nFicando de acordo, é só me avisar para darmos andamento. Qualquer dúvida, estou à disposição.\n\n${empNome()}`);
+ if(ok&&q.status=='Rascunho'){q.status='Aguardando';saveQuote(1);render()}}
 function Vquote(){const q=S.q,vs=db.vehicles.filter(v=>v.cli==q.cli),ro=q.status=='Aprovado';
  return`<div class="bar"><button onclick="qBack()">Voltar</button><h1>Orçamento ${q.n}</h1><span class="sp"></span>${pill(q.status)}</div>
  <div class="card"><div class="g2"><div class="lb"><div class="cbhd"><span>Cliente</span><button type="button" class="sm" onclick="qNovoCli()">+ Novo cliente</button></div>${combo('q-cli',{items:toItems(cliArr()),value:q.cli,ph:'Digite o nome do cliente...',pick:id=>qs('cli',id),novo:t=>qNovoCli(t),novoTxt:'Cadastrar novo cliente'})}</div>
@@ -369,7 +393,8 @@ function ckSet(n,k,v){const o=od(S.id);(o.ck[n]=o.ck[n]||{})[k]=v;save()}
 function ckFoto(n,f){if(f)pic(f,d=>{ckSet(n,'foto',d);render()})}
 function addFotos(fs){const o=od(S.id),t=$('#ft').value;[...fs].forEach(f=>pic(f,d=>{o.fotos.push({id:uid(),t,src:d,obs:''});save();render()}))}
 function addPag(){const o=od(S.id);modal('Registrar pagamento',[['forma','Forma','select',FP],['valor','Valor pago (R$)','number',0,1],['parc','Parcelas (se parcelado)','number'],['data','Data','date',0,1]],{valor:Math.max(0,oTot(o)-paid(o)),data:today(),parc:1},p=>{const v=+p.valor,rest=oTot(o)-paid(o);if(!(v>0))return toast('Informe um valor maior que zero');if(v>rest+0.005)return toast('Valor maior que o restante da O.S. ('+R(Math.max(0,rest))+')');o.pags.push({...p,valor:v});save();render()})}
-function waOS(){const o=od(S.id);wa(cl(o.cli).tel,`Olá ${cl(o.cli).nome}! O.S. ${o.num} do ${vlabel(vh(o.veh))}: status "${o.status}". Total ${R(oTot(o))}, pago ${R(paid(o))}, restante ${R(oTot(o)-paid(o))}.`)}
+function waOS(){const o=od(S.id),c=cl(o.cli),v=o.veh?vlabel(vh(o.veh)):'';
+ waDoc(genOS,o,c.tel,`Olá, ${c.nome}! Tudo bem?\n\nEsse documento é a ordem de serviço Nº ${o.num}${v?' do seu '+v:''}, com os serviços e peças registrados.\nSituação: ${o.status}\nValor total: ${R(oTot(o))}\n\nQualquer dúvida, estou à disposição.\n\n${empNome()}`)}
 function Vorder(){const o=od(S.id);if(!o)return Vorders();const T=[['resumo','Resumo'],['check','Checklist'],['laudo','Laudo'],['fotos','Fotos'],['pag','Pagamento']];
  let b='';
  if(S.tab=='resumo')b=`<div class="card"><div class="g2"><label>Mecânico responsável<input value="${e(o.mec)}" onchange="U('mec',this.value)"></label><label>Horas de mão de obra<input value="${e(o.horas)}" onchange="U('horas',this.value)"></label></div>
@@ -388,9 +413,11 @@ function Vorder(){const o=od(S.id);if(!o)return Vorders();const T=[['resumo','Re
  <div class="tabs">${T.map(([k,l])=>`<a class="${S.tab==k?'on':''}" onclick="S.tab='${k}';render()">${l}</a>`).join('')}</div>${b}`}
 
 /* ---------- Recibo ---------- */
+function waRecibo(){const o=od(S.id),c=cl(o.cli);if(!o.pags.length)return toast('Registre um pagamento antes do recibo');
+ waDoc(genRecibo,o,c.tel,`Olá, ${c.nome}! Tudo bem?\n\nEsse documento é o recibo referente ao seu pagamento da O.S. Nº ${o.num}.\nValor recebido: ${R(paid(o))}${oTot(o)-paid(o)>0.005?'\nRestante: '+R(oTot(o)-paid(o)):''}\n\nAgradecemos a confiança!\n\n${empNome()}`)}
 function reciboTxt(o){return`RECIBO DE PAGAMENTO - O.S. ${o.num}\nCliente: ${cl(o.cli).nome}\nVeículo: ${vlabel(vh(o.veh))}\nTotal: ${R(oTot(o))}\nPago: ${R(paid(o))}\nRestante: ${R(oTot(o)-paid(o))}`}
 function Vrecibo(){const o=od(S.id),v=vh(o.veh),c=cl(o.cli);
- return`<div class="bar"><button onclick="go('order','${o.id}','pag')">Voltar</button><span class="sp"></span><button class="pr" onclick="genRecibo(od(S.id))">Salvar PDF</button><button onclick="navigator.clipboard&&navigator.clipboard.writeText(reciboTxt(od(S.id))).then(()=>toast('Texto copiado'))">Copiar texto</button><button class="wa" onclick="wa(cl(od(S.id).cli).tel,reciboTxt(od(S.id)))">Enviar por WhatsApp</button></div>
+ return`<div class="bar"><button onclick="go('order','${o.id}','pag')">Voltar</button><span class="sp"></span><button class="pr" onclick="genRecibo(od(S.id))">Salvar PDF</button><button onclick="navigator.clipboard&&navigator.clipboard.writeText(reciboTxt(od(S.id))).then(()=>toast('Texto copiado'))">Copiar texto</button><button class="wa" onclick="waRecibo()">Enviar por WhatsApp</button></div>
  <div class="recibo"><h1>RECIBO DE PAGAMENTO</h1><p><b>${e((db.cfg||{}).nome||'Oficina')}</b><br>O.S. ${o.num} — emitido em ${D(today())}</p>
  <p>Cliente: <b>${e(c.nome)}</b> ${e(c.doc)}<br>Veículo: <b>${e(vlabel(v))}</b> ${e(v.ano)} ${e(v.cor)} — ${e(v.km)} km</p>
  <table><tr><th>Item</th><th class="n">Qtd</th><th class="n">Total</th></tr>${o.items.map(i=>`<tr><td>${e(i.d)}</td><td class="n">${i.q}</td><td class="n">${R(i.q*i.v)}</td></tr>`).join('')}${+o.desc?`<tr><td>Desconto</td><td></td><td class="n">-${R(o.desc)}</td></tr>`:''}<tr><td colspan="2"><b>Total</b></td><td class="n"><b>${R(oTot(o))}</b></td></tr></table>
@@ -601,7 +628,8 @@ async function genLaudo(o){
  if(F.length){Z.sec('Fotos e evidências');Z.photos(F)}
  Z.sign({n:L.tec||o.mec||Z.c.nome,r:'Técnico responsável',sig:1});
  await Z.end(fname('Laudo',o))}
-async function savePDF(d,name){const blob=d.output('blob');try{const dl=window.claude&&await claude.use('downloads');if(!dl)throw 0;await dl.save({filename:name,data:blob});toast('PDF salvo. Anexe no WhatsApp para enviar.')}catch(er){if(er&&er.code=='declined')return;dlBlob(blob,name)}}
+let CAP=null;
+async function savePDF(d,name){const blob=d.output('blob');if(CAP){CAP.blob=blob;CAP.name=name+(name.endsWith('.pdf')?'':'.pdf');return}try{const dl=window.claude&&await claude.use('downloads');if(!dl)throw 0;await dl.save({filename:name,data:blob});toast('PDF salvo. Anexe no WhatsApp para enviar.')}catch(er){if(er&&er.code=='declined')return;dlBlob(blob,name)}}
 const MESES=['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
 const icoMail=(d,x,y,c)=>{d.setDrawColor(...c);d.setLineWidth(.3);d.rect(x,y,4,3,'S');d.line(x,y,x+2,y+1.7);d.line(x+4,y,x+2,y+1.7);d.setLineWidth(.2)};
 const icoTel=(d,x,y,c)=>{d.setDrawColor(...c);d.setLineWidth(.3);d.roundedRect(x+.7,y-.2,2.6,3.8,.6,.6,'S');d.line(x+1.5,y+3,x+2.5,y+3);d.setLineWidth(.2)};
@@ -831,7 +859,7 @@ async function instalarApp(){
 addEventListener('beforeinstallprompt',e=>{e.preventDefault();INST=e;if(typeof SES!=='undefined'&&SES&&!$('#modal').innerHTML)render()});
 addEventListener('appinstalled',()=>{INST=null;toast('App instalado');if(typeof SES!=='undefined'&&SES)render()});
 if('serviceWorker' in navigator&&/^https?:/.test(location.protocol))addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
-const APP_VER='1.2.0';
+const APP_VER='1.3.1';
 (function(){const f=document.getElementById('ver');if(f)f.textContent='Fio-Mar Gestor · versão '+APP_VER;document.title=document.title})();
 boot();
 </script>
