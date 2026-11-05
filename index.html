@@ -109,10 +109,11 @@ main{padding:14px 14px 28px}:root{padding-bottom:0}
 .ck{grid-template-columns:1fr 1fr}.ck input[type=text]{grid-column:1/3}
 }
 @media print{nav,.bar,#toast{display:none!important}body{background:#fff}main{padding:0;max-width:none}.recibo{border:0}}
+.ver{text-align:center;font-size:11px;color:var(--mut,#5B6B79);padding:14px 0 18px;opacity:.8;user-select:none}
 </style>
 </head>
 <body>
-<div id="app"><nav id="nav"></nav><main id="main"></main></div>
+<div id="app"><nav id="nav"></nav><main id="main"></main><footer id="ver" class="ver"></footer></div>
 <div id="modal"></div><div id="toast"></div>
 <script>
 const $=s=>document.querySelector(s);
@@ -499,7 +500,7 @@ function Vprod(){const p=prod(S.id);if(!p.id)return Vstock();
 /* ---------- PDFs (padrão profissional de oficina) ---------- */
 /* ---------- PDFs (padrão profissional de oficina) ---------- */
 const fname=(p,o)=>`${p}-OS-${o.num}-${(cl(o.cli).nome||'cliente').replace(/[^\w]+/g,'_')}`;
-const PC={dk:[21,33,43],ac:[245,183,0],ln:[214,220,226],bg:[246,248,250],mu:[100,112,124],tx:[21,33,43],wh:[255,255,255],lt:[190,200,210]};
+const PC={hd:[233,237,241],dk:[21,33,43],ac:[245,183,0],ln:[214,220,226],bg:[246,248,250],mu:[100,112,124],tx:[21,33,43],wh:[255,255,255],lt:[190,200,210]};
 const ext=v=>{v=Math.round((+v||0)*100);const rs=Math.floor(v/100),ct=v%100,
  un=['zero','um','dois','três','quatro','cinco','seis','sete','oito','nove','dez','onze','doze','treze','catorze','quinze','dezesseis','dezessete','dezoito','dezenove'],
  ten=['','','vinte','trinta','quarenta','cinquenta','sessenta','setenta','oitenta','noventa'],
@@ -510,21 +511,21 @@ const ext=v=>{v=Math.round((+v||0)*100);const rs=Math.floor(v/100),ct=v%100,
   return P.map((x,i)=>i?((x[1]<100||x[1]%100==0)?' e ':' ')+x[0]:x[0]).join('')};
  const a=rs?(rs==1?'um real':g(rs)+(rs%1e6==0?' de reais':' reais')):'',z=ct?(ct==1?'um centavo':g(ct)+' centavos'):'';
  return a&&z?a+' e '+z:(a||z||'zero real')};
-function mkDoc(title,num,meta){
+function mkDoc(title,num,meta,opt){
  const c={nome:'Minha oficina',...CFG0,...db.cfg},d=new window.jspdf.jsPDF({unit:'mm',format:'a4'}),W=210,M=14,CW=W-2*M,Z={y:0,d,c,W,M,CW};
  const tx=Z.tx=(s,x,yy,t={})=>{d.setFont('helvetica',t.b?'bold':'normal');d.setFontSize(t.s||10);d.setTextColor(...(t.c||(t.g?PC.mu:PC.tx)));d.text(String(s),x,yy,t.a?{align:t.a}:undefined)};
  const lines=Z.lines=(s,w,sz,b)=>{d.setFont('helvetica',b?'bold':'normal');d.setFontSize(sz);return d.splitTextToSize(String(s),w)};
- Z.need=h=>{if(Z.y+h>278){d.addPage();Z.y=22;return 1}return 0};
+ Z.need=h=>{if(Z.y+h>(Z.maxY||278)){d.addPage();Z.y=opt&&opt.custom?18:22;return 1}return 0};
  Z.img=(s,x,yy,mw,mh)=>{try{const p=d.getImageProperties(s),k=Math.min(mw/p.width,mh/p.height);d.addImage(s,p.fileType,x,yy,p.width*k,p.height*k);return p.height*k}catch(er){return 0}};
  /* cabeçalho */
- let lw=0,lh=0;if(c.logo){try{const p=d.getImageProperties(c.logo),k=Math.min(40/p.width,26/p.height);lw=p.width*k;lh=p.height*k}catch(er){}}
+ if(!(opt&&opt.custom)){let lw=0,lh=0;if(c.logo){try{const p=d.getImageProperties(c.logo),k=Math.min(40/p.width,26/p.height);lw=p.width*k;lh=p.height*k}catch(er){}}
  const hx=lw?M+lw+10:M,inf=[[c.razao,c.cnpj&&'CNPJ '+c.cnpj],[c.end,c.cidade],[c.tel1,c.tel2,c.email]].map(a=>a.filter(Boolean).join('  ·  ')).filter(Boolean).flatMap(s=>lines(s,128-hx,8.5)),HB=Math.max(40,22+inf.length*4.2+5,lh+16);
  d.setFillColor(...PC.dk);d.rect(0,0,W,HB,'F');d.setFillColor(...PC.ac);d.rect(0,HB,W,1.8,'F');
  if(lw){const ly=(HB-lh-4)/2;d.setFillColor(255,255,255);if(c.logoRound)d.circle(M+lw/2+2,ly+lh/2+2,Math.max(lw,lh)/2+2,'F');else d.roundedRect(M,ly,lw+4,lh+4,2,2,'F');Z.img(c.logo,M+2,ly+2,lw,lh)}
  tx(c.nome,hx,16,{b:1,s:17,c:PC.wh});inf.forEach((t,i)=>tx(t,hx,22+i*4.2,{s:8.5,c:PC.lt}));
  tx(title,W-M,17,{b:1,s:16,c:PC.ac,a:'right'});tx(num,W-M,24,{b:1,s:11,c:PC.wh,a:'right'});
  (meta||[]).filter(Boolean).slice(0,3).forEach((s,i)=>tx(s,W-M,29.5+i*4.6,{s:8.5,c:PC.lt,a:'right'}));
- Z.y=HB+11;
+ Z.y=HB+11}else Z.y=14;
  /* blocos */
  Z.cards=(A,B)=>{const w=(CW-6)/2,prep=X=>X.rows.filter(r=>r[1]).map(r=>[r[0],lines(r[1],w-30,9.5,r[2]),r[2]]),a=prep(A),b=prep(B),hh=L=>L.reduce((s,r)=>s+r[1].length*4.4+1.4,0),h=13+Math.max(hh(a),hh(b));
   Z.need(h+4);[[A,a,M],[B,b,M+w+6]].forEach(([X,L,x])=>{d.setFillColor(...PC.bg);d.setDrawColor(...PC.ln);d.rect(x,Z.y,w,h,'FD');d.setFillColor(...PC.ac);d.rect(x,Z.y,w,1.2,'F');tx(X.t,x+3,Z.y+7,{b:1,s:8,g:1});let q=Z.y+12.5;L.forEach(r=>{tx(r[0],x+3,q,{s:8.5,g:1});r[1].forEach((t,i)=>tx(t,x+27,q+i*4.4,{s:9.5,b:r[2]}));q+=r[1].length*4.4+1.4})});Z.y+=h+7};
@@ -551,7 +552,7 @@ function mkDoc(title,num,meta){
  Z.pay=(prazo)=>{const A={t:'PAGAMENTO'+(prazo?' E PRAZO':''),rows:[['Formas',c.pagto],['Prazo',prazo]]};
   if(c.pix){Z.cards(A,{t:'PIX',rows:[['Chave',c.pix],['Tipo',c.pixtipo||'Telefone'],['Favorecido',c.pixnome]]});Z.note('Garantia',c.garantia)}
   else Z.cards(A,{t:'GARANTIA',rows:[['Condições',c.garantia]]})};
- Z.end=name=>{const N=d.getNumberOfPages();for(let i=1;i<=N;i++){d.setPage(i);
+ Z.end=name=>{const N=d.getNumberOfPages();for(let i=1;i<=N;i++){d.setPage(i);if(opt&&opt.foot){opt.foot(i,N);continue}
   if(i>1){d.setFillColor(...PC.dk);d.rect(0,0,W,11,'F');d.setFillColor(...PC.ac);d.rect(0,11,W,.9,'F');tx(c.nome,M,7.2,{b:1,s:9,c:PC.wh});tx(title+'  '+num,W-M,7.2,{s:9,c:PC.ac,a:'right'})}
   d.setDrawColor(...PC.ln);d.line(M,285,W-M,285);tx([c.nome,c.cnpj&&'CNPJ '+c.cnpj,c.tel1].filter(Boolean).join('  ·  '),M,290,{g:1,s:8});tx(`Página ${i} de ${N}`,W-M,290,{a:'right',s:8,g:1})}
   return savePDF(d,name+'.pdf')};
@@ -600,17 +601,61 @@ async function genLaudo(o){
  Z.sign({n:L.tec||o.mec||Z.c.nome,r:'Técnico responsável',sig:1});
  await Z.end(fname('Laudo',o))}
 async function savePDF(d,name){const blob=d.output('blob');try{const dl=window.claude&&await claude.use('downloads');if(!dl)throw 0;await dl.save({filename:name,data:blob});toast('PDF salvo. Anexe no WhatsApp para enviar.')}catch(er){if(er&&er.code=='declined')return;dlBlob(blob,name)}}
+const MESES=['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+const icoMail=(d,x,y,c)=>{d.setDrawColor(...c);d.setLineWidth(.3);d.rect(x,y,4,3,'S');d.line(x,y,x+2,y+1.7);d.line(x+4,y,x+2,y+1.7);d.setLineWidth(.2)};
+const icoTel=(d,x,y,c)=>{d.setDrawColor(...c);d.setLineWidth(.3);d.roundedRect(x+.7,y-.2,2.6,3.8,.6,.6,'S');d.line(x+1.5,y+3,x+2.5,y+3);d.setLineWidth(.2)};
+const icoCal=(d,x,y,c)=>{d.setDrawColor(...c);d.setLineWidth(.3);d.rect(x,y,3.6,3.3,'S');d.line(x,y+1,x+3.6,y+1);d.line(x+1,y-.5,x+1,y+.5);d.line(x+2.6,y-.5,x+2.6,y+.5);d.setLineWidth(.2)};
+/* texto corrido com trechos em negrito, quebrando linha sozinho; devolve o próximo y */
+function richP(Z,parts,x,y,w,sz,lh,dry){const d=Z.d;let cx=x,cy=y;
+ for(const p of parts){const b=!!p.b;for(const wd of String(p.t).split(/(\s+)/)){if(!wd)continue;d.setFont('helvetica',b?'bold':'normal');d.setFontSize(sz);const ww=d.getTextWidth(wd);
+  if(/^\s+$/.test(wd)){if(cx>x)cx+=ww;continue}if(cx+ww>x+w+.01&&cx>x){cx=x;cy+=lh}if(!dry)Z.tx(wd,cx,cy,{b,s:sz});cx+=ww}}
+ return cy+lh}
 async function genRecibo(o){
  if(noLib())return;if(!o.pags.length)return toast('Registre um pagamento antes de gerar o recibo');
- const cli=cl(o.cli),v=vh(o.veh),Z=mkDoc('RECIBO DE PAGAMENTO','O.S. '+o.num,['Emissão: '+D(today())]),{d,tx,M,CW}=Z,val=paid(o),rest=oTot(o)-val;
- Z.parties(cli,v);Z.need(40);const ex=Z.lines('('+ext(val)+')',CW-14,9.5,0),h=24+ex.length*4.4;
- d.setFillColor(...PC.bg);d.setDrawColor(...PC.ln);d.rect(M,Z.y,CW,h,'FD');d.setFillColor(...PC.ac);d.rect(M,Z.y,2.2,h,'F');
- tx('VALOR RECEBIDO',M+8,Z.y+7,{b:1,s:8,g:1});tx(R(val),M+8,Z.y+17,{b:1,s:20});ex.forEach((t,i)=>tx(t,M+8,Z.y+23+i*4.4,{s:9.5,g:1}));Z.y+=h+6;
- Z.note('Declaração',`Recebemos de ${cli.nome}${cli.doc?' (CPF/CNPJ '+cli.doc+')':''} a importância de ${R(val)}, referente aos serviços e peças da O.S. ${o.num}, realizados no veículo ${[v.modelo,v.placa].filter(Boolean).join(' - ')}.`);
- Z.sec('Itens da O.S.');Z.table([{h:'Descrição',w:.62},{h:'Qtd',w:.1,a:'c'},{h:'Total',w:.28,a:'r'}],o.items.map(i=>[i.d,i.q,R(i.q*i.v)]));
- Z.sec('Pagamentos recebidos');Z.table([{h:'Data',w:.2},{h:'Forma',w:.5},{h:'Valor',w:.3,a:'r'}],o.pags.map(p=>[D(p.data),p.forma+(p.forma=='Parcelado'?' em '+p.parc+'x':''),R(p.valor)]));
- const rows=[];if(+o.desc)rows.push(['Desconto','-'+R(o.desc)]);rows.push(['Total da O.S.',R(oTot(o))],['Valor pago',R(val)]);Z.totals(rows,'RESTANTE',R(rest));
- Z.sign({n:Z.c.nome,r:Z.c.resp||'Recebido por',sig:1});
+ const cli=cl(o.cli),v=vh(o.veh),val=paid(o),rest=oTot(o)-val,last=o.pags[o.pags.length-1].data||today();
+ let c0=null;const Z=mkDoc('RECIBO','O.S. '+o.num,[],{custom:1,foot:(i,N)=>{const c=Z.c,d=Z.d,fy=268;d.setDrawColor(...PC.ln);d.setLineWidth(.2);d.line(M,fy,W-M,fy);
+   [c.razao,c.cnpj&&'CNPJ: '+c.cnpj,c.end,c.cidade].filter(Boolean).forEach((t,k)=>tx(t,M+2,fy+5+k*4,{s:7.5,g:1}));
+   let k=0;[[c.email,icoMail],[c.tel1,icoTel],[c.tel2,icoTel]].forEach(([t,ic])=>{if(!t)return;ic(d,118,fy+2.6+k*4,PC.mu);tx(t,124,fy+5+k*4,{s:7.5,g:1});k++});
+   tx(`Página ${i}/${N}`,W-M,fy+23,{s:8,a:'right'})}}),{d,tx,M,CW,W,c}=Z;Z.maxY=264;
+ /* cabeçalho: faixa grafite, marca à esquerda, contatos à direita */
+ let lw=0,lh=0;if(c.logo){try{const p=d.getImageProperties(c.logo),k=Math.min(26/p.width,26/p.height);lw=p.width*k;lh=p.height*k}catch(er){}}
+ const hx=lw?M+lw+10:M,inf=[c.razao,c.cnpj&&'CNPJ: '+c.cnpj,c.end,c.cidade].filter(Boolean).flatMap(t=>Z.lines(t,116-hx,8.5)),HB=Math.max(40,23+inf.length*4.2+5,lh+14);
+ d.setFillColor(...PC.dk);d.rect(0,0,W,HB,'F');d.setFillColor(...PC.ac);d.rect(0,HB,W,1.8,'F');
+ if(lw){const ly=(HB-lh-4)/2;d.setFillColor(255,255,255);if(c.logoRound)d.circle(M+lw/2+2,ly+lh/2+2,Math.max(lw,lh)/2+2,'F');else d.roundedRect(M,ly,lw+4,lh+4,2,2,'F');Z.img(c.logo,M+2,ly+2,lw,lh)}
+ tx(c.nome,hx,15,{b:1,s:16,c:PC.wh});inf.forEach((t,i)=>tx(t,hx,21.5+i*4.2,{s:8.5,c:PC.lt}));
+ d.setFillColor(34,50,63);d.roundedRect(W-M-31,8,31,8,1.6,1.6,'F');icoCal(d,W-M-28,10.4,PC.ac);tx(D(today()),W-M-22,13.4,{b:1,s:8.5,c:PC.wh});
+ [[c.email,icoMail],[c.tel1,icoTel],[c.tel2,icoTel]].filter(x=>x[0]).forEach(([t,ic],k)=>{ic(d,124,23+k*5.2,PC.ac);tx(t,130,25.6+k*5.2,{s:8.5,c:PC.lt})});
+ Z.y=HB+9;
+ /* título + valor recebido */
+ const ano=String(last).slice(0,4),ty=Z.y;d.setFillColor(...PC.hd);d.rect(M,ty,CW,15,'F');d.setFillColor(...PC.ac);d.rect(M,ty,2.4,15,'F');
+ tx('Recibo',M+7,ty+7,{b:1,s:16});tx(`Nº ${o.num}-${ano}  ·  O.S. ${o.num}`,M+7,ty+12,{s:8.5,g:1});
+ d.setFillColor(...PC.dk);d.roundedRect(W-M-60,ty+2,58,11,1.6,1.6,'F');tx('VALOR RECEBIDO',W-M-56,ty+5.6,{b:1,s:6.5,c:PC.lt});tx(R(val),W-M-5,ty+10.6,{b:1,s:13,c:PC.ac,a:'right'});
+ Z.y=ty+20;
+ /* declaração */
+ const veic=[v.modelo,v.placa&&'placa '+v.placa].filter(Boolean).join(', '),
+  parts=[{t:'Declaro que recebi de '},{t:cli.nome||'cliente',b:1},{t:cli.doc?' (CPF/CNPJ '+cli.doc+')':''},{t:' o valor de '},{t:R(val),b:1},{t:' ('+ext(val)+') em '},{t:D(last),b:1},{t:', referente aos seguintes serviços e peças'+(veic?' do veículo ':'')},{t:veic,b:1},{t:' (O.S. '+o.num+'):'}];
+ Z.y=richP(Z,parts,M+2,Z.y,CW-4,10,5)+3;
+ /* seções Serviços / Peças */
+ const bar=t=>{Z.need(22);d.setFillColor(...PC.hd);d.rect(M,Z.y,CW,8,'F');d.setFillColor(...PC.ac);d.rect(M,Z.y,2.4,8,'F');tx(t,M+7,Z.y+5.6,{b:1,s:11});Z.y+=11};
+ const lista=(t,its)=>{if(!its.length)return;bar(t);tx('Descrição',M+2,Z.y,{s:7.5,g:1,b:1});tx('Qtd',W-M-36,Z.y,{s:7.5,g:1,b:1,a:'right'});tx('Valor',W-M-2,Z.y,{s:7.5,g:1,b:1,a:'right'});Z.y+=3;
+  its.forEach(i=>{const L=Z.lines(i.d,CW-64,9.5,1),T=i.det?Z.lines(i.det,CW-64,8,0):[],h=L.length*4.3+T.length*3.6+3.4;Z.need(h+3);
+   L.forEach((x,k)=>tx(x,M+2,Z.y+3.6+k*4.3,{b:1,s:9.5}));T.forEach((x,k)=>tx(x,M+2,Z.y+3.6+L.length*4.3+k*3.6,{s:8,g:1}));
+   tx((+i.q||0)+'x',W-M-36,Z.y+3.6,{s:9.5,a:'right'});tx(R((+i.q||0)*(+i.v||0)),W-M-2,Z.y+3.6,{s:9.5,b:1,a:'right'});
+   d.setDrawColor(...PC.ln);d.setLineWidth(.2);d.line(M,Z.y+h-.6,W-M,Z.y+h-.6);Z.y+=h});Z.y+=2};
+ lista('Serviços',o.items.filter(i=>i.t!='Peça'));lista('Peças',o.items.filter(i=>i.t=='Peça'));
+ /* pagamento */
+ const colH=Math.max(o.pags.length*5.2+7,c.pix?18:12);Z.need(14+colH+26);bar('Pagamento');
+ tx('Pagamentos recebidos',M+2,Z.y,{b:1,s:9});o.pags.forEach((p,k)=>{const yy=Z.y+5.6+k*5.2;tx(D(p.data)+'  ·  '+p.forma+(p.forma=='Parcelado'?' em '+p.parc+'x':''),M+2,yy,{s:9});tx(R(p.valor),M+92,yy,{s:9,b:1,a:'right'})});
+ if(c.pix){tx('PIX',118,Z.y,{b:1,s:9});tx(c.pix+(c.pixtipo?'  ('+c.pixtipo+')':''),118,Z.y+5.6,{s:9});if(c.pixnome)tx(c.pixnome,118,Z.y+10.4,{s:8,g:1})}
+ else if(c.pagto){tx('Formas aceitas',118,Z.y,{b:1,s:9});Z.lines(c.pagto,70,8.5).slice(0,3).forEach((t,k)=>tx(t,118,Z.y+5.6+k*4.2,{s:8.5,g:1}))}
+ Z.y+=colH+2;
+ const rows=[];if(+o.desc)rows.push(['Desconto','-'+R(o.desc)]);rows.push(['Total da O.S.',R(oTot(o))],['Valor recebido',R(val)]);Z.need(rows.length*5.2+16);{let yy=Z.y;const x=W-M-84;rows.forEach(r=>{tx(r[0],x+3,yy+4,{s:9,g:1});tx(r[1],W-M-3,yy+4,{s:9,a:'right'});yy+=5.2});
+  d.setFillColor(...PC.dk);d.rect(x,yy+1,84,9.5,'F');d.setFillColor(...PC.ac);d.rect(x,yy+1,1.6,9.5,'F');tx('RESTANTE',x+5,yy+7.4,{b:1,s:10,c:PC.wh});tx(R(rest),W-M-3,yy+7.6,{b:1,s:12,c:PC.ac,a:'right'});Z.y=yy+14}
+ /* local, data e assinatura */
+ Z.need(38);const cid=String(c.cidade||'').split(/[-–,·]/)[0].trim(),dt=String(last).split('-'),txt=(cid?cid+', ':'')+(dt.length==3?+dt[2]+' de '+MESES[+dt[1]-1]+' de '+dt[0]:D(last));
+ tx(txt,W/2,Z.y+2,{b:1,s:9.5,a:'center'});if(c.assin)Z.img(c.assin,W/2-27,Z.y+4,54,19);
+ d.setDrawColor(...PC.tx);d.setLineWidth(.3);d.line(W/2-50,Z.y+24,W/2+50,Z.y+24);d.setLineWidth(.2);
+ tx(c.nome,W/2,Z.y+29,{b:1,s:9.5,a:'center'});if(c.resp)tx(c.resp,W/2,Z.y+33.5,{s:8.5,g:1,a:'center'});Z.y+=36;
  await Z.end(`Recibo-OS-${o.num}-${(cli.nome||'cliente').replace(/[^\w]+/g,'_')}`)}
 /* ---------- Agenda ---------- */
 const AG=()=>db.appts=db.appts||[],SV=()=>db.svcs=db.svcs||[];
@@ -785,6 +830,8 @@ async function instalarApp(){
 addEventListener('beforeinstallprompt',e=>{e.preventDefault();INST=e;if(typeof SES!=='undefined'&&SES&&!$('#modal').innerHTML)render()});
 addEventListener('appinstalled',()=>{INST=null;toast('App instalado');if(typeof SES!=='undefined'&&SES)render()});
 if('serviceWorker' in navigator&&/^https?:/.test(location.protocol))addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+const APP_VER='1.1.0';
+(function(){const f=document.getElementById('ver');if(f)f.textContent='Fio-Mar Gestor · versão '+APP_VER;document.title=document.title})();
 boot();
 </script>
 </body>
