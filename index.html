@@ -267,10 +267,11 @@ const normPl=x=>String(x||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
 const okPl=x=>/^[A-Z]{3}\d[A-Z0-9]\d{2}$/.test(x);
 const pst=t=>{const n=$('#pst');if(n)n.textContent=t};
 const tcase=x=>String(x||'').toLowerCase().replace(/(^|[\s\/-])([a-zà-ú])/g,(m,a,b)=>a+b.toUpperCase());
-function editVeh(id,cb,pre){const orig=id?vh(id):null,v={...(orig||{}),...(pre||{})};EV=id||null;PLK='';const F=[['cli','Cliente','busca',cliArr(),1,{btn:'Novo cliente',novoTxt:'Cadastrar novo cliente',novo:(t,cur)=>viaModal(x=>editVeh(id,cb,x),cur,set=>editClient(null,n=>set({cli:n.id}),{nome:t}))}],['placa','Placa','text',0,1],['modelo','Marca/modelo','text',0,1],['ano','Ano','number'],['km','Quilometragem','number'],['motor','Motor'],['cor','Cor'],['chassi','Chassi'],['obs','Observações','area']];
+let VCB=null;
+function editVeh(id,cb,pre){VCB=cb;const orig=id?vh(id):null,v={...(orig||{}),...(pre||{})};EV=id||null;PLK='';const F=[['cli','Cliente','busca',cliArr(),1,{btn:'Novo cliente',novoTxt:'Cadastrar novo cliente',novo:(t,cur)=>viaModal(x=>editVeh(id,cb,x),cur,set=>editClient(null,n=>set({cli:n.id}),{nome:t}))}],['placa','Placa (pode informar depois)','text',0,0],['modelo','Marca/modelo','text',0,1],['ano','Ano','number'],['km','Quilometragem','number'],['motor','Motor'],['cor','Cor'],['chassi','Chassi'],['obs','Observações','area']];
  modal(id?'Editar veículo':'Novo veículo',F,v,o=>{o.placa=normPl(o.placa)||o.placa.toUpperCase();if(id)Object.assign(orig,o);else{const n={id:uid(),...o};db.vehicles.push(n);if(cb)cb(n)}save();render();if(!id&&cb)toast('Veículo cadastrado')},0,id&&(()=>delVeh(id)));
  const pl=$('#modal [name=placa]');pl.setAttribute('autocapitalize','characters');pl.setAttribute('autocomplete','off');pl.maxLength=8;
- pl.closest('label').insertAdjacentHTML('afterend',`<div class="bar" style="margin:-4px 0 12px"><label class="btn sm pr" style="margin:0;color:var(--on)">Escanear placa<input type="file" accept="image/*" capture="environment" class="fi" onchange="scanPlaca(this.files[0]);this.value=''"></label><button type="button" class="sm" onclick="buscaPlaca()">Buscar dados</button><span class="muted" id="pst" style="font-size:13px"></span></div>`);
+ pl.closest('label').insertAdjacentHTML('afterend',`<div class="bar" style="margin:-4px 0 12px"><label class="btn sm pr" style="margin:0;color:var(--on)">Escanear placa<input type="file" accept="image/*" capture="environment" class="fi" onchange="scanPlaca(this.files[0]);this.value=''"></label><label class="btn sm" style="margin:0">Da galeria<input type="file" accept="image/*" class="fi" onchange="scanPlaca(this.files[0]);this.value=''"></label><button type="button" class="sm" onclick="buscaPlaca()">Buscar dados</button><span class="muted" id="pst" style="font-size:13px"></span></div><div id="pal" class="bar" style="margin:-6px 0 10px"></div>`);
  pl.addEventListener('input',()=>{pl.value=pl.value.toUpperCase().replace(/[^A-Z0-9-]/g,'');clearTimeout(PT);if(!EV)PT=setTimeout(()=>buscaPlaca(true),700)})}
 async function buscaPlaca(auto){const f=$('#modal form');if(!f)return;const p=normPl(f.elements.placa.value);
  if(!okPl(p))return auto?0:toast('Digite uma placa válida (ex.: ABC1D23)');
@@ -304,11 +305,54 @@ function prepImg(file){return new Promise((ok,no)=>{const r=new FileReader();r.o
 function plateFrom(txt){const raw=String(txt||'').toUpperCase(),parts=raw.split(/\n+/).map(x=>x.replace(/[^A-Z0-9]/g,''));parts.push(raw.replace(/[^A-Z0-9]/g,''));const toL={0:'O',1:'I',2:'Z',4:'A',5:'S',6:'G',7:'T',8:'B'},toN={O:'0',Q:'0',D:'0',I:'1',L:'1',Z:'2',A:'4',S:'5',G:'6',T:'7',B:'8'};let best=null;
  for(const t of parts)for(let i=0;i+7<=t.length;i++){let miss=0,out='';for(let j=0;j<7;j++){const c=t[i+j],letter=j<3||(j===4&&!/\d/.test(c));if(letter){if(/[A-Z]/.test(c))out+=c;else if(toL[c]){out+=toL[c];miss++}else{miss=9;break}}else{if(/\d/.test(c))out+=c;else if(toN[c]){out+=toN[c];miss++}else{miss=9;break}}}if(miss<=3&&/^[A-Z]{3}\d[A-Z0-9]\d{2}$/.test(out)&&(!best||miss<best.miss))best={p:out,miss}}
  return best}
-async function scanPlaca(file){if(!file)return;const status=$('#pst');if(!status)return;pst('Preparando imagem para leitura...');let w=null;
+async function scanPlacaOld(file){if(!file)return;const status=$('#pst');if(!status)return;pst('Preparando imagem para leitura...');let w=null;
  try{await loadTess();const variants=await prepImg(file);w=await Tesseract.createWorker('eng');await w.setParameters({tessedit_char_whitelist:'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',tessedit_pageseg_mode:'11',preserve_interword_spaces:'1'});let best=null;
  for(const img of variants){for(const psm of ['11','7','8']){await w.setParameters({tessedit_pageseg_mode:psm});const r=await w.recognize(img),b=plateFrom(r.data.text);if(b&&(!best||b.miss<best.miss))best=b;if(best&&best.miss===0)break}if(best&&best.miss===0)break}
  if(!document.body.contains(status))return;if(!best)return pst('Não identifiquei a placa. Fotografe de frente, aproxime e evite reflexos; também pode recortar a imagem para deixar a placa maior.');const el=$('#modal [name=placa]');if(!el)return;el.value=best.p;el.dispatchEvent(new Event('input',{bubbles:true}));PLK='';if(best.miss===0){pst('Placa lida: '+best.p+'. Consultando dados...');buscaPlaca()}else pst('Leitura provável: '+best.p+'. Confira os caracteres e toque em Buscar dados.')
  }catch(x){pst('Falha na leitura da foto. Tente outra imagem ou digite a placa.')}finally{if(w)try{await w.terminate()}catch(x){}}}
+
+/* ---- leitura da placa v2: recorte do usuário -> isola os caracteres -> OCR com votação ---- */
+const dataBlob=u=>{const m=/^data:([^;]+);base64,(.*)$/.exec(u),s=atob(m[2]),a=new Uint8Array(s.length);for(let i=0;i<s.length;i++)a[i]=s.charCodeAt(i);return new Blob([a],{type:m[1]})};
+const plImg=u=>new Promise((ok,no)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=()=>no(new Error('img'));i.src=u});
+function plPN(t){if(t.length!=7)return null;const toL={0:'O',1:'I',2:'Z',4:'A',5:'S',6:'G',7:'T',8:'B'},toN={O:'0',Q:'0',D:'0',I:'1',L:'1',Z:'2',A:'4',S:'5',G:'6',T:'7',B:'8',J:'1'};let o='';
+ for(let j=0;j<7;j++){const c=t[j],isD=/\d/.test(c),letter=j<3||(j==4&&!isD);if(letter){if(/[A-Z]/.test(c))o+=c;else if(toL[c])o+=toL[c];else return null}else{if(isD)o+=c;else if(toN[c])o+=toN[c];else return null}}return o}
+function plPrep(img){const H=220,k=H/img.height,W=Math.max(8,Math.min(1000,Math.round(img.width*k))),c=document.createElement('canvas');c.width=W;c.height=H;
+ const x=c.getContext('2d',{willReadFrequently:true});x.imageSmoothingQuality='high';x.drawImage(img,0,0,W,H);const d=x.getImageData(0,0,W,H).data,n=W*H,g0=new Uint8Array(n),bl=new Uint8Array(n);
+ for(let q=0,p=0;q<n;q++,p+=4){const r=d[p],g=d[p+1],b=d[p+2];g0[q]=Math.round(r*.299+g*.587+b*.114);const mx=Math.max(r,g,b),mn=Math.min(r,g,b);
+  if(mx==b&&mx>60&&mx>mn&&(mx-mn)/mx>.31){const h=60*(4+(r-g)/(mx-mn));if(h>190&&h<270)bl[q]=1}}
+ const g=new Uint8Array(n);for(let y=0;y<H;y++)for(let xx=0;xx<W;xx++){let s=0,m=0;for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const yy=y+dy,x2=xx+dx;if(yy>=0&&yy<H&&x2>=0&&x2<W){s+=g0[yy*W+x2];m++}}g[y*W+xx]=bl[y*W+xx]?255:Math.round(s/m)}
+ const hist=new Uint32Array(256);for(let q=0;q<n;q++)hist[g[q]]++;return{g,W,H,hist,n}}
+function plThr(P,mode){if(mode=='otsu'){let sum=0;for(let t=0;t<256;t++)sum+=t*P.hist[t];let wb=0,sb=0,best=-1,th=128;for(let t=0;t<256;t++){wb+=P.hist[t];if(!wb)continue;const wf=P.n-wb;if(!wf)break;sb+=t*P.hist[t];const mb=sb/wb,mf=(sum-sb)/wf,sc=wb*wf*(mb-mf)*(mb-mf);if(sc>best){best=sc;th=t}}return th}
+ let acc=0;const lim=P.n*mode/100;for(let t=0;t<256;t++){acc+=P.hist[t];if(acc>=lim)return t}return 128}
+function plGlyphs(P,mode){const{g,W,H}=P,t=plThr(P,mode),lab=new Int32Array(W*H),cs=[],st=[];let id=0;
+ for(let p=0;p<W*H;p++){if(g[p]>=t||lab[p])continue;id++;let x0=W,y0=H,x1=0,y1=0,a=0;lab[p]=id;st.push(p);
+  while(st.length){const q=st.pop(),qx=q%W,qy=(q/W)|0;a++;if(qx<x0)x0=qx;if(qx>x1)x1=qx;if(qy<y0)y0=qy;if(qy>y1)y1=qy;
+   for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const nx=qx+dx,ny=qy+dy;if(nx<0||ny<0||nx>=W||ny>=H)continue;const nq=ny*W+nx;if(g[nq]<t&&!lab[nq]){lab[nq]=id;st.push(nq)}}}
+  if(a>40)cs.push({id,x:x0,y:y0,w:x1-x0+1,h:y1-y0+1})}
+ const hs=cs.filter(c=>c.h<H*.98).map(c=>c.h).sort((a,b)=>b-a);if(hs.length<3)return null;const top=hs.slice(0,5).sort((a,b)=>a-b),ref=top[top.length>>1];
+ let keep=cs.filter(c=>c.h>=ref*.55&&c.h<=ref*1.25&&c.w<c.h*1.3);if(keep.length<5)return null;
+ const cys=keep.map(c=>c.y+c.h/2).sort((a,b)=>a-b),cy=cys[cys.length>>1];keep=keep.filter(c=>Math.abs(c.y+c.h/2-cy)<ref*.4).sort((a,b)=>a.x-b.x);if(keep.length<5||keep.length>9)return null;
+ return keep.map(c=>{const m=document.createElement('canvas');m.width=c.w;m.height=c.h;const x=m.getContext('2d'),im=x.createImageData(c.w,c.h);
+  for(let yy=0;yy<c.h;yy++)for(let xx=0;xx<c.w;xx++){const z=(yy*c.w+xx)*4,on=lab[(c.y+yy)*W+c.x+xx]==c.id?0:255;im.data[z]=im.data[z+1]=im.data[z+2]=on;im.data[z+3]=255}x.putImageData(im,0,0);return m})}
+function plCompose(gl,hh,gp){const gap=Math.round(hh*gp),ws=gl.map(m=>Math.max(1,Math.round(m.width*hh/m.height))),W=ws.reduce((a,b)=>a+b,0)+gap*(gl.length-1)+60,o=document.createElement('canvas');o.width=W;o.height=hh+60;
+ const x=o.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,W,o.height);x.imageSmoothingQuality='high';let px=30;gl.forEach((m,i)=>{x.drawImage(m,px,30,ws[i],hh);px+=ws[i]+gap});return o}
+function plShow(best,alts,auto){const el=$('#modal [name=placa]');if(!el)return;el.value=best;el.dispatchEvent(new Event('input',{bubbles:true}));PLK='';
+ const pal=$('#pal');if(pal&&!auto)pal.innerHTML='<span class="muted" style="font-size:13px">Outras leituras:</span>'+alts.filter(a=>a!=best).map(a=>`<button type="button" class="sm" onclick="plPick('${a}')">${a}</button>`).join('');
+ if(auto){pst('Placa lida: '+best+'. Consultando dados...');buscaPlaca()}else pst('Leitura provável: '+best+'. Confira os caracteres (se estiver diferente, toque na leitura certa) e toque em Buscar dados.')}
+function plPick(a){const el=$('#modal [name=placa]');if(!el)return;el.value=a;el.dispatchEvent(new Event('input',{bubbles:true}));PLK='';pst('Placa: '+a+'. Toque em Buscar dados.')}
+async function plLer(u){const pal=$('#pal');if(pal)pal.innerHTML='';pst('Lendo a placa...');let w=null;
+ try{const img=await plImg(u);await loadTess();w=await Tesseract.createWorker('eng');await w.setParameters({tessedit_char_whitelist:'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',preserve_interword_spaces:'1'});
+  const P=plPrep(img),C=[];let achou=0;
+  for(const mode of ['otsu',20,25]){const gl=plGlyphs(P,mode);if(!gl)continue;achou++;
+   for(const gp of [.18,.35])for(const psm of ['7','8']){await w.setParameters({tessedit_pageseg_mode:psm});const r=await w.recognize(plCompose(gl,70,gp)),t=String(r.data.text||'').toUpperCase().replace(/[^A-Z0-9]/g,''),p=plPN(t)||(plateFrom(t)||{}).p;if(p)C.push(p)}}
+  if(!document.body.contains($('#pst')))return;
+  if(!C.length){if(!achou){pst('Não achei os caracteres. Tentando outro método...');await w.terminate();w=null;return scanPlacaOld(dataBlob(u))}return pst('Não consegui ler. Corte mais justo na placa, de frente e sem reflexo, ou digite a placa.')}
+  const cnt={};C.forEach(c=>cnt[c]=(cnt[c]||0)+1);const rank=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a]);
+  let best='';for(let j=0;j<7;j++){const v={};C.forEach(c=>v[c[j]]=(v[c[j]]||0)+1);best+=Object.keys(v).sort((a,b)=>v[b]-v[a])[0]}
+  const alts=[best,...rank].filter((x,i,a)=>a.indexOf(x)==i).slice(0,4),sure=C.length>=4&&(cnt[best]||0)/C.length>=.6;plShow(best,alts,sure)
+ }catch(x){pst('Falha na leitura da foto. Tente outra imagem ou digite a placa.')}finally{if(w)try{await w.terminate()}catch(x){}}}
+function scanPlaca(file){if(!file)return;const cur=modalVals();
+ viaModal(x=>editVeh(EV,VCB,x),cur,set=>cropImg(file,{max:1400,src:2400,plate:1,title:'Corte só a placa',hint:'Arraste os cantos até a caixa ficar só em volta dos caracteres da placa (sem o para-choque). Quanto mais justo, melhor a leitura.',ok:'Ler placa'},u=>{set({});plLer(u)}))}
 function Vvehicles(){return`<div class="bar"><h1>Veículos</h1><span class="sp"></span><button class="pr" onclick="editVeh()">Novo veículo</button></div>`+
  (db.vehicles.map(v=>`<div class="row" onclick="editVeh('${v.id}')"><div>${e(vlabel(v))} <span class="muted">${e(v.ano)} ${e(v.cor)}</span><small>${e(cl(v.cli).nome)} — ${e(v.km)} km ${e(v.motor)}</small></div><div class="r"><button class="sm" onclick="event.stopPropagation();go('orders',0,0,{vei:'${v.id}'})">Histórico</button></div></div>`).join('')||'<p class="muted">Nenhum veículo cadastrado.</p>')}
 
@@ -467,13 +511,13 @@ function cropMove(o,m,dx,dy,W,H,a){const MIN=30;
   if(n.x<-.5||n.y<-.5||n.x+n.w>W+.5||n.y+n.h>H+.5||n.w<MIN||n.h<MIN)return o}
  return n}
 function cropImg(file,opt,done){if(!file)return;
- const go=url=>{const i=new Image();i.onload=()=>{const k=Math.min(1,1600/Math.max(i.width,i.height)),src=document.createElement('canvas');src.width=Math.round(i.width*k);src.height=Math.round(i.height*k);src.getContext('2d').drawImage(i,0,0,src.width,src.height);CR={src,opt,done,sh:'free',asp:0,round:0,b:null,m:null};cropOpen()};i.onerror=()=>toast('Não consegui abrir a imagem');i.src=url};
+ const go=url=>{const i=new Image();i.onload=()=>{const k=Math.min(1,((opt&&opt.src)||1600)/Math.max(i.width,i.height)),src=document.createElement('canvas');src.width=Math.round(i.width*k);src.height=Math.round(i.height*k);src.getContext('2d').drawImage(i,0,0,src.width,src.height);CR={src,opt,done,sh:'free',asp:0,round:0,b:null,m:null,init:!!(opt&&opt.plate)};cropOpen()};i.onerror=()=>toast('Não consegui abrir a imagem');i.src=url};
  if(typeof file=='string')return go(file);const r=new FileReader();r.onload=()=>go(r.result);r.readAsDataURL(file)}
 function cropOpen(){const C=CR,s=Math.min((innerWidth-56)/C.src.width,Math.min(innerHeight*.48,460)/C.src.height,4),w=Math.round(C.src.width*s),h=Math.round(C.src.height*s);
- $('#modal').innerHTML=`<div class="ov"><div class="md"><h2 style="margin-top:0">Ajustar imagem</h2><p class="muted" style="margin:0 0 10px">Arraste os cantos ou as bordas para escolher a área. Arraste por dentro para mover.</p><div style="display:flex;justify-content:center"><canvas id="crc" width="${w}" height="${h}" style="touch-action:none;max-width:100%;background:#8a949c;border-radius:6px"></canvas></div>
+ $('#modal').innerHTML=`<div class="ov"><div class="md"><h2 style="margin-top:0">${e((C.opt&&C.opt.title)||'Ajustar imagem')}</h2><p class="muted" style="margin:0 0 10px">${e((C.opt&&C.opt.hint)||'Arraste os cantos ou as bordas para escolher a área. Arraste por dentro para mover.')}</p><div style="display:flex;justify-content:center"><canvas id="crc" width="${w}" height="${h}" style="touch-action:none;max-width:100%;background:#8a949c;border-radius:6px"></canvas></div>
  <div class="bar" style="margin:10px 0">${[['free','Livre'],['sq','Quadrado'],['round','Redondo'],['43','4:3'],['169','16:9'],['31','3:1']].map(([k,n])=>`<button type="button" class="sm" data-k="${k}" onclick="cropShape('${k}')">${n}</button>`).join('')}<button type="button" class="sm" onclick="cropRot()">Girar</button><button type="button" class="sm" onclick="cropShape('free',1)">Imagem inteira</button></div>
- <div class="bar" style="margin:6px 0 0"><button type="button" onclick="closeM()">Cancelar</button><span class="sp"></span><button type="button" class="pr" onclick="cropOk()">Cortar e salvar</button></div></div></div>`;
- C.b=null;cropBind();cropShape(C.sh)}
+ <div class="bar" style="margin:6px 0 0"><button type="button" onclick="closeM()">Cancelar</button><span class="sp"></span><button type="button" class="pr" onclick="cropOk()">${e((C.opt&&C.opt.ok)||'Cortar e salvar')}</button></div></div></div>`;
+ C.b=null;cropBind();cropShape(C.sh);if(C.init){C.init=0;const cv=$('#crc'),W=cv.width,H=cv.height;C.b={x:W*.06,y:H*.3,w:W*.88,h:H*.4};cropDraw()}}
 const SH={free:[0,0],sq:[1,0],round:[1,1],'43':[4/3,0],'169':[16/9,0],'31':[3,0]};
 function cropShape(k,all){const C=CR,cv=$('#crc'),W=cv.width,H=cv.height;C.sh=k;[C.asp,C.round]=SH[k];
  if(C.asp){let bw=Math.min(W,H*C.asp),bh=bw/C.asp;bw*=.9;bh*=.9;C.b={x:(W-bw)/2,y:(H-bh)/2,w:bw,h:bh}}
@@ -859,7 +903,7 @@ async function instalarApp(){
 addEventListener('beforeinstallprompt',e=>{e.preventDefault();INST=e;if(typeof SES!=='undefined'&&SES&&!$('#modal').innerHTML)render()});
 addEventListener('appinstalled',()=>{INST=null;toast('App instalado');if(typeof SES!=='undefined'&&SES)render()});
 if('serviceWorker' in navigator&&/^https?:/.test(location.protocol))addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
-const APP_VER='1.3.1';
+const APP_VER='1.4.0';
 (function(){const f=document.getElementById('ver');if(f)f.textContent='Fio-Mar Gestor · versão '+APP_VER;document.title=document.title})();
 boot();
 </script>
