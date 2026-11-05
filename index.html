@@ -461,7 +461,13 @@ function pic(file,cb){const r=new FileReader();r.onload=()=>{const i=new Image()
 function ckSet(n,k,v){const o=od(S.id);(o.ck[n]=o.ck[n]||{})[k]=v;save()}
 function ckFoto(n,f){if(f)pic(f,d=>{ckSet(n,'foto',d);render()})}
 function addFotos(fs){const o=od(S.id),t=$('#ft').value;[...fs].forEach(f=>pic(f,d=>{o.fotos.push({id:uid(),t,src:d,obs:''});save();render()}))}
-function addPag(){const o=od(S.id);modal('Registrar pagamento',[['forma','Forma','select',FP],['valor','Valor pago (R$)','number',0,1],['parc','Parcelas (se parcelado)','number'],['data','Data','date',0,1]],{valor:Math.max(0,oTot(o)-paid(o)),data:today(),parc:1},p=>{const v=+p.valor,rest=oTot(o)-paid(o);if(!(v>0))return toast('Informe um valor maior que zero');if(v>rest+0.005)return toast('Valor maior que o restante da O.S. ('+R(Math.max(0,rest))+')');o.pags.push({...p,valor:v});save();render()})}
+const taxaTot=o=>o.pags.reduce((a,p)=>a+(+p.taxa||0),0),isCard=f=>f=='Cartão'||f=='Parcelado';
+function addPag(){const o=od(S.id);modal('Registrar pagamento',[['forma','Forma','select',FP],['valor','Valor do serviço pago (R$)','number',0,1],['maq','Valor que passou na máquina do cartão (R$)','number'],['parc','Parcelas (se parcelado)','number'],['data','Data','date',0,1]],{valor:Math.max(0,oTot(o)-paid(o)),data:today(),parc:1},p=>{const v=+p.valor,rest=oTot(o)-paid(o),mq=+p.maq||0;if(!(v>0))return toast('Informe um valor maior que zero');if(v>rest+0.005)return toast('Valor maior que o restante da O.S. ('+R(Math.max(0,rest))+')');
+  const r={forma:p.forma,valor:v,parc:p.parc,data:p.data};if(isCard(p.forma)&&mq>v+0.005){r.maq=Math.round(mq*100)/100;r.taxa=Math.round((mq-v)*100)/100}else if(isCard(p.forma)&&mq>0&&mq<v-0.005)toast('Valor da máquina menor que o do serviço: taxa não registrada');
+  o.pags.push(r);save();render()});
+ const f=$('#modal form'),sel=f.elements.forma,lb=f.elements.maq.closest('label'),hint=document.createElement('div');hint.className='muted';hint.style.cssText='font-size:13px;margin:-6px 0 12px';lb.after(hint);
+ const upd=()=>{const c=isCard(sel.value);lb.style.display=c?'':'none';hint.style.display=c?'':'none';const v=+f.elements.valor.value||0,m=+f.elements.maq.value||0;hint.textContent=!c?'':m>v+.005?'Taxa de cartão: '+R(m-v)+'. Fica fora do lucro: o serviço conta '+R(v)+'.':m>0&&m<v-.005?'Valor da máquina menor que o do serviço.':'Se o cliente pagou taxa de cartão, informe o total que passou na máquina.'};
+ f.addEventListener('input',upd);f.addEventListener('change',upd);upd()}
 function waOS(){const o=od(S.id),c=cl(o.cli),v=o.veh?vlabel(vh(o.veh)):'';
  waDoc(genOS,o,c.tel,`Olá, ${c.nome}! Tudo bem?\n\nEsse documento é a ordem de serviço Nº ${o.num}${v?' do seu '+v:''}, com os serviços e peças registrados.\nSituação: ${o.status}\nValor total: ${R(oTot(o))}\n\nQualquer dúvida, estou à disposição.\n\n${empNome()}`)}
 function Vorder(){const o=od(S.id);if(!o)return Vorders();const T=[['resumo','Resumo'],['check','Checklist'],['laudo','Laudo'],['fotos','Fotos'],['pag','Pagamento']];
@@ -476,21 +482,21 @@ function Vorder(){const o=od(S.id);if(!o)return Vorders();const T=[['resumo','Re
  if(S.tab=='fotos')b=`<div class="card"><div class="bar"><select id="ft" style="width:auto;margin:0">${FT.map(x=>`<option>${x}</option>`).join('')}</select><label class="btn pr" style="margin:0;color:var(--on)">Tirar ou enviar foto<input type="file" accept="image/*" multiple class="fi" onchange="toast('Processando foto...');addFotos([...this.files]);this.value=''"></label></div></div>
  <div class="ph">${o.fotos.map((f,i)=>`<figure><img src="${e(f.src)}" alt="${e(f.t)}"><figcaption><b>${e(f.t)}</b><br><input value="${e(f.obs)}" placeholder="Observação" onchange="od(S.id).fotos[${i}].obs=this.value;save()"><button class="sm" style="margin-top:4px" onclick="od(S.id).fotos.splice(${i},1);save();render()">Remover</button></figcaption></figure>`).join('')}</div>${o.fotos.length?'':'<p class="muted">As fotos ficam vinculadas a esta O.S. como prova do que foi encontrado e executado.</p>'}`;
  if(S.tab=='pag'){const rest=oTot(o)-paid(o);b=`<div class="card"><table><tr><td>Total</td><td class="n">${R(oTot(o))}</td></tr><tr><td>Valor pago</td><td class="n">${R(paid(o))}</td></tr><tr><td><b>Valor restante</b></td><td class="n"><b>${R(rest)}</b></td></tr></table>
- <div class="bar" style="margin-top:10px"><button class="pr" onclick="addPag()">Registrar pagamento</button>${o.pags.length?`<button onclick="go('recibo','${o.id}')">Gerar recibo</button>`:''}</div></div>`+o.pags.map((p,i)=>`<div class="row" style="cursor:default"><div>${e(p.forma)}${p.forma=='Parcelado'?' em '+p.parc+'x':''}<small>${D(p.data)}</small></div><div class="r"><b>${R(p.valor)}</b><button class="sm" onclick="od(S.id).pags.splice(${i},1);save();render()">×</button></div></div>`).join('')}
+ <div class="bar" style="margin-top:10px"><button class="pr" onclick="addPag()">Registrar pagamento</button>${o.pags.length?`<button onclick="go('recibo','${o.id}')">Gerar recibo</button>`:''}</div></div>`+o.pags.map((p,i)=>`<div class="row" style="cursor:default"><div>${e(p.forma)}${p.forma=='Parcelado'?' em '+p.parc+'x':''}<small>${D(p.data)}${p.taxa?' · máquina '+R(p.maq)+' · taxa '+R(p.taxa):''}</small></div><div class="r"><b>${R(p.valor)}</b><button class="sm" onclick="od(S.id).pags.splice(${i},1);save();render()">×</button></div></div>`).join('')}
  return`<div class="bar"><button onclick="go('orders')">Voltar</button><h1>O.S. ${o.num}</h1><span class="sp"></span><select style="width:auto;margin:0" onchange="setSt(this.value)">${ST.map(s=>`<option ${o.status==s?'selected':''}>${s}</option>`).join('')}</select></div>
  <p style="margin:0 0 12px"><b>${e(vlabel(vh(o.veh)))}</b> <span class="muted">${e(cl(o.cli).nome)}</span> ${pill(o.status)} <button class="wa sm" onclick="waOS()">WhatsApp</button> <button class="dg sm" onclick="confirmDel(this,delOS)">Excluir O.S.</button></p>
  <div class="tabs">${T.map(([k,l])=>`<a class="${S.tab==k?'on':''}" onclick="S.tab='${k}';render()">${l}</a>`).join('')}</div>${b}`}
 
 /* ---------- Recibo ---------- */
 function waRecibo(){const o=od(S.id),c=cl(o.cli);if(!o.pags.length)return toast('Registre um pagamento antes do recibo');
- waDoc(genRecibo,o,c.tel,`Olá, ${c.nome}! Tudo bem?\n\nEsse documento é o recibo referente ao seu pagamento da O.S. Nº ${o.num}.\nValor recebido: ${R(paid(o))}${oTot(o)-paid(o)>0.005?'\nRestante: '+R(oTot(o)-paid(o)):''}\n\nAgradecemos a confiança!\n\n${empNome()}`)}
-function reciboTxt(o){return`RECIBO DE PAGAMENTO - O.S. ${o.num}\nCliente: ${cl(o.cli).nome}\nVeículo: ${vlabel(vh(o.veh))}\nTotal: ${R(oTot(o))}\nPago: ${R(paid(o))}\nRestante: ${R(oTot(o)-paid(o))}`}
+ waDoc(genRecibo,o,c.tel,`Olá, ${c.nome}! Tudo bem?\n\nEsse documento é o recibo referente ao seu pagamento da O.S. Nº ${o.num}.\nValor do serviço pago: ${R(paid(o))}${taxaTot(o)?'\nPassou no cartão: '+R(paid(o)+taxaTot(o))+' (inclui taxa de cartão de '+R(taxaTot(o))+')':''}${oTot(o)-paid(o)>0.005?'\nRestante: '+R(oTot(o)-paid(o)):''}\n\nAgradecemos a confiança!\n\n${empNome()}`)}
+function reciboTxt(o){return`RECIBO DE PAGAMENTO - O.S. ${o.num}\nCliente: ${cl(o.cli).nome}\nVeículo: ${vlabel(vh(o.veh))}\nTotal: ${R(oTot(o))}\nPago: ${R(paid(o))}${taxaTot(o)?'\nPassou no cartão: '+R(paid(o)+taxaTot(o))+' (inclui taxa de cartão de '+R(taxaTot(o))+')':''}\nRestante: ${R(oTot(o)-paid(o))}`}
 function Vrecibo(){const o=od(S.id),v=vh(o.veh),c=cl(o.cli);
  return`<div class="bar"><button onclick="go('order','${o.id}','pag')">Voltar</button><span class="sp"></span><button class="pr" onclick="genRecibo(od(S.id))">Salvar PDF</button><button onclick="navigator.clipboard&&navigator.clipboard.writeText(reciboTxt(od(S.id))).then(()=>toast('Texto copiado'))">Copiar texto</button><button class="wa" onclick="waRecibo()">Enviar por WhatsApp</button></div>
  <div class="recibo"><h1>RECIBO DE PAGAMENTO</h1><p><b>${e((db.cfg||{}).nome||'Oficina')}</b><br>O.S. ${o.num} — emitido em ${D(today())}</p>
  <p>Cliente: <b>${e(c.nome)}</b> ${e(c.doc)}<br>Veículo: <b>${e(vlabel(v))}</b> ${e(v.ano)} ${e(v.cor)} — ${e(v.km)} km</p>
  <table><tr><th>Item</th><th class="n">Qtd</th><th class="n">Total</th></tr>${o.items.map(i=>`<tr><td>${e(i.d)}</td><td class="n">${i.q}</td><td class="n">${R(i.q*i.v)}</td></tr>`).join('')}${+o.desc?`<tr><td>Desconto</td><td></td><td class="n">-${R(o.desc)}</td></tr>`:''}<tr><td colspan="2"><b>Total</b></td><td class="n"><b>${R(oTot(o))}</b></td></tr></table>
- <h2>Pagamentos</h2><table>${o.pags.map(p=>`<tr><td>${D(p.data)}</td><td>${e(p.forma)}${p.forma=='Parcelado'?' '+p.parc+'x':''}</td><td class="n">${R(p.valor)}</td></tr>`).join('')}<tr><td colspan="2"><b>Valor pago</b></td><td class="n"><b>${R(paid(o))}</b></td></tr><tr><td colspan="2">Valor restante</td><td class="n">${R(oTot(o)-paid(o))}</td></tr></table>
+ <h2>Pagamentos</h2><table>${o.pags.map(p=>`<tr><td>${D(p.data)}</td><td>${e(p.forma)}${p.forma=='Parcelado'?' '+p.parc+'x':''}</td><td class="n">${R(p.valor)}</td></tr>${p.taxa?`<tr><td></td><td class="muted">Passou na máquina ${R(p.maq)}, taxa de cartão ${R(p.taxa)}</td><td></td></tr>`:''}`).join('')}<tr><td colspan="2"><b>Valor pago</b></td><td class="n"><b>${R(paid(o))}</b></td></tr><tr><td colspan="2">Valor restante</td><td class="n">${R(oTot(o)-paid(o))}</td></tr></table>
  <p style="margin-top:40px;text-align:center">______________________________<br>${e((db.cfg||{}).nome||'Oficina')}</p></div>`}
 
 /* ---------- Painel ---------- */
@@ -743,8 +749,8 @@ async function genRecibo(o){
    d.setDrawColor(...PC.ln);d.setLineWidth(.2);d.line(M,Z.y+h-.6,W-M,Z.y+h-.6);Z.y+=h});Z.y+=2};
  lista('Serviços',o.items.filter(i=>i.t!='Peça'));lista('Peças',o.items.filter(i=>i.t=='Peça'));
  /* pagamento */
- const colH=Math.max(o.pags.length*5.2+7,c.pix?18:12);Z.need(14+colH+26);bar('Pagamento');
- tx('Pagamentos recebidos',M+2,Z.y,{b:1,s:9});o.pags.forEach((p,k)=>{const yy=Z.y+5.6+k*5.2;tx(D(p.data)+'  ·  '+p.forma+(p.forma=='Parcelado'?' em '+p.parc+'x':''),M+2,yy,{s:9});tx(R(p.valor),M+92,yy,{s:9,b:1,a:'right'})});
+ const nl=o.pags.reduce((a,p)=>a+(p.taxa?3:1),0),colH=Math.max(nl*5.2+7,c.pix?18:12);Z.need(14+colH+26);bar('Pagamento');
+ tx('Pagamentos recebidos',M+2,Z.y,{b:1,s:9});{let ln=0;o.pags.forEach(p=>{const yy=Z.y+5.6+ln*5.2,fm=D(p.data)+'  ·  '+p.forma+(p.forma=='Parcelado'?' em '+p.parc+'x':'');if(p.taxa){tx(fm+'  (valor na máquina)',M+2,yy,{s:9});tx(R(p.maq),M+92,yy,{s:9,a:'right'});tx('(-) Taxa de cartão',M+2,yy+5.2,{s:9,g:1});tx('-'+R(p.taxa),M+92,yy+5.2,{s:9,g:1,a:'right'});tx('Valor do serviço',M+2,yy+10.4,{s:9,b:1});tx(R(p.valor),M+92,yy+10.4,{s:9,b:1,a:'right'});ln+=3}else{tx(fm,M+2,yy,{s:9});tx(R(p.valor),M+92,yy,{s:9,b:1,a:'right'});ln++}})}
  if(c.pix){tx('PIX',118,Z.y,{b:1,s:9});tx(c.pix+(c.pixtipo?'  ('+c.pixtipo+')':''),118,Z.y+5.6,{s:9});if(c.pixnome)tx(c.pixnome,118,Z.y+10.4,{s:8,g:1})}
  else if(c.pagto){tx('Formas aceitas',118,Z.y,{b:1,s:9});Z.lines(c.pagto,70,8.5).slice(0,3).forEach((t,k)=>tx(t,118,Z.y+5.6+k*4.2,{s:8.5,g:1}))}
  Z.y+=colH+2;
@@ -929,7 +935,7 @@ async function instalarApp(){
 addEventListener('beforeinstallprompt',e=>{e.preventDefault();INST=e;if(typeof SES!=='undefined'&&SES&&!$('#modal').innerHTML)render()});
 addEventListener('appinstalled',()=>{INST=null;toast('App instalado');if(typeof SES!=='undefined'&&SES)render()});
 if('serviceWorker' in navigator&&/^https?:/.test(location.protocol))addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
-const APP_VER='1.5.0';
+const APP_VER='1.6.0';
 (function(){const f=document.getElementById('ver');if(f)f.textContent='Fio-Mar Gestor · versão '+APP_VER;document.title=document.title})();
 boot();
 </script>
