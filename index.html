@@ -211,7 +211,7 @@ const vh=id=>db.vehicles.find(x=>x.id==id)||{};
 const od=id=>db.orders.find(x=>x.id==id);
 const sum=(it,d)=>it.reduce((a,i)=>a+(+i.q||0)*(+i.v||0),0)-(+d||0);
 const oTot=o=>sum(o.items,o.desc),paid=o=>o.pags.reduce((a,p)=>a+(+p.valor||0),0);
-const vlabel=v=>`${v.modelo||'?'} ${v.placa||''}`;
+const vlabel=v=>(v&&(v.modelo||v.placa))?`${v.modelo||'?'} ${v.placa||''}`.trim():'Sem veículo';
 function go(v,id,tab,f){S.v=v;S.id=id||null;S.tab=tab||'resumo';S.f=f||{};render();scrollTo(0,0)}
 
 /* ---------- Campo de busca (digite para filtrar) ---------- */
@@ -332,10 +332,10 @@ function editItem(w,n,os){const i=w.items[n];if(!i)return;const lk=!!i.pid;
   const it={...i,...o,q,v};if(o.custo===''||o.custo==null)delete it.custo;else it.custo=+o.custo;if(lk)it.t=i.t;
   w.items[n]=it;save();render();toast('Item atualizado')},0,()=>{if(os)rmOS(n);else{w.items.splice(n,1);save();render()}})}
 function addItem(w){modal('Adicionar item',[['t','Tipo','select',['Serviço','Peça','Mão de obra']],['d','Descrição','text',0,1],['det','Detalhes (opcional)'],['q','Quantidade','number',0,1],['v','Valor unitário (R$)','number',0,1],['custo','Custo unitário (R$, opcional - usado no lucro)','number']],{q:1,t:'Serviço'},o=>{const it={...o,q:+o.q,v:+o.v};if(o.custo===''||o.custo==null)delete it.custo;else it.custo=+o.custo;w.items.push(it);save();render()})}
-function saveQuote(quiet){const q=S.q;if(!q.cli){if(!quiet)toast('Escolha ou cadastre o cliente');return}if(!q.veh)q.veh=db.vehicles.find(v=>v.cli==q.cli)?.id||'';
+function saveQuote(quiet){const q=S.q;if(!q.cli){if(!quiet)toast('Escolha ou cadastre o cliente');return}if(!q.veh)q.veh='';
  if(q.novo){delete q.novo;db.qseq++;db.quotes.push(q)}else db.quotes[db.quotes.findIndex(x=>x.id==q.id)]=q;save();if(!quiet)toast('Orçamento salvo')}
-function approve(){if(!db.vehicles.some(v=>v.cli==S.q.cli))return toast('Cadastre um veículo para este cliente');saveQuote(1);modal('Aceite do cliente',[['nome','Nome de quem aprova (assinatura)','text',0,1]],{},o=>{Object.assign(S.q,{status:'Aprovado',aprov:{nome:o.nome,data:today()}});saveQuote();render()},`<p class="muted">${TERMOS}</p>`)}
-function makeOS(){if(!db.vehicles.some(v=>v.cli==S.q.cli))return toast('Cadastre um veículo para este cliente');saveQuote(1);const q=S.q;const o={id:uid(),num:String(db.seq++).padStart(4,'0'),cli:q.cli,veh:q.veh,qid:q.id,problema:q.obs||'',mec:'',status:'Aberta',items:JSON.parse(JSON.stringify(q.items)),desc:q.desc,ck:{},laudo:{data:today()},fotos:(q.fotos||[]).map(f=>({id:uid(),t:'Foto do veículo',src:f.src,obs:f.obs})),pags:[],horas:'',pecas:'',aberta:today()};
+function approve(){saveQuote(1);modal('Aceite do cliente',[['nome','Nome de quem aprova (assinatura)','text',0,1]],{},o=>{Object.assign(S.q,{status:'Aprovado',aprov:{nome:o.nome,data:today()}});saveQuote();render()},`<p class="muted">${TERMOS}</p>`)}
+function makeOS(){saveQuote(1);const q=S.q;const o={id:uid(),num:String(db.seq++).padStart(4,'0'),cli:q.cli,veh:q.veh,qid:q.id,problema:q.obs||'',mec:'',status:'Aberta',items:JSON.parse(JSON.stringify(q.items)),desc:q.desc,ck:{},laudo:{data:today()},fotos:(q.fotos||[]).map(f=>({id:uid(),t:'Foto do veículo',src:f.src,obs:f.obs})),pags:[],horas:'',pecas:'',aberta:today()};
  db.orders.push(o);q.os=o.id;const rb=baixaOS(o);saveQuote(1);go('order',o.id);avisoBaixa(rb)}
 function wa(phone,txt){let p=String(phone||'').replace(/\D/g,'');if(!p)return toast('Cliente sem telefone cadastrado');if(p.length<=11)p='55'+p;const u=`https://wa.me/${p}?text=${encodeURIComponent(txt)}`;let w=null;try{w=window.open(u,'_blank')}catch(x){}if(!w)waFallback(u,txt)}
 let WT='';
@@ -344,7 +344,7 @@ function waQuote(){const q=S.q;wa(cl(q.cli).tel,`Olá ${cl(q.cli).nome}! Segue o
 function Vquote(){const q=S.q,vs=db.vehicles.filter(v=>v.cli==q.cli),ro=q.status=='Aprovado';
  return`<div class="bar"><button onclick="qBack()">Voltar</button><h1>Orçamento ${q.n}</h1><span class="sp"></span>${pill(q.status)}</div>
  <div class="card"><div class="g2"><div class="lb"><div class="cbhd"><span>Cliente</span><button type="button" class="sm" onclick="qNovoCli()">+ Novo cliente</button></div>${combo('q-cli',{items:toItems(cliArr()),value:q.cli,ph:'Digite o nome do cliente...',pick:id=>qs('cli',id),novo:t=>qNovoCli(t),novoTxt:'Cadastrar novo cliente'})}</div>
- <div class="lb"><div class="cbhd"><span>Veículo</span><button type="button" class="sm" onclick="qNovoVeh()" ${q.cli?'':'disabled'}>+ Novo veículo</button></div><select onchange="qs('veh',this.value)" ${q.cli?'':'disabled'}>${vs.length?vs.map(v=>`<option value="${v.id}" ${v.id==q.veh?'selected':''}>${e(vlabel(v))}</option>`).join(''):`<option value="">${q.cli?'Nenhum veículo - toque em + Novo veículo':'Escolha o cliente primeiro'}</option>`}</select></div>
+ <div class="lb"><div class="cbhd"><span>Veículo</span><button type="button" class="sm" onclick="qNovoVeh()" ${q.cli?'':'disabled'}>+ Novo veículo</button></div><select onchange="qs('veh',this.value)" ${q.cli?'':'disabled'}>${vs.length?`<option value="" ${q.veh?'':'selected'}>Sem veículo</option>`+vs.map(v=>`<option value="${v.id}" ${v.id==q.veh?'selected':''}>${e(vlabel(v))}</option>`).join(''):`<option value="">${q.cli?'Sem veículo (opcional)':'Escolha o cliente primeiro'}</option>`}</select></div>
  <label>Prazo<input value="${e(q.prazo)}" placeholder="Ex.: 3 dias úteis" onchange="qs('prazo',this.value)"></label>
  <label>Desconto (R$)<input type="number" step="any" value="${q.desc}" onchange="qs('desc',this.value)"></label></div>
  <label>Observações / problema relatado<textarea onchange="qs('obs',this.value)">${e(q.obs)}</textarea></label></div>
@@ -355,8 +355,9 @@ function Vquote(){const q=S.q,vs=db.vehicles.filter(v=>v.cli==q.cli),ro=q.status
  <div class="bar"><button onclick="saveQuote()">Salvar</button><button class="pr" onclick="genPDF(S.q)">Gerar PDF</button>${q.novo?'':'<button class="dg" onclick="confirmDel(this,delQuote)">Excluir</button>'}<button class="wa" onclick="waQuote()">Enviar por WhatsApp</button>${ro?'':`<button onclick="approve()">Registrar aprovação</button><button onclick="S.q.status='Recusado';saveQuote();render()">Marcar recusado</button>`}${ro&&!q.os?`<button class="pr" onclick="makeOS()">Gerar O.S.</button>`:''}${q.os?`<button class="pr" onclick="go('order','${q.os}')">Abrir O.S.</button>`:''}</div>`}
 
 /* ---------- Ordens de serviço ---------- */
-function newOS(){if(!db.vehicles.length)return toast('Cadastre um veículo primeiro');
- modal('Nova O.S. direta',[['veh','Veículo','busca',db.vehicles.map(v=>[v.id,vlabel(v),(cl(v.cli).nome||'')+' '+(v.cor||''),cl(v.cli).nome]),1],['problema','Problema relatado','area']],{},f=>{const v=vh(f.veh);const o={id:uid(),num:String(db.seq++).padStart(4,'0'),cli:v.cli,veh:v.id,problema:f.problema,mec:'',status:'Aberta',items:[],desc:0,ck:{},laudo:{data:today()},fotos:[],pags:[],horas:'',pecas:'',aberta:today()};db.orders.push(o);save();go('order',o.id)})}
+function newOS(cur){cur=cur||{};
+ modal('Nova O.S. direta',[['cli','Cliente','busca',cliArr(),0,{btn:'Novo cliente',novoTxt:'Cadastrar novo cliente',novo:(t,c)=>viaModal(x=>newOS(x),c,set=>editClient(null,n=>set({cli:n.id}),{nome:t}))}],['veh','Veículo (opcional)','busca',db.vehicles.map(v=>[v.id,vlabel(v),(cl(v.cli).nome||'')+' '+(v.cor||''),cl(v.cli).nome]),0],['problema','Problema relatado','area']],cur,f=>{const v=f.veh?vh(f.veh):{};const cid=f.cli||v.cli;if(!cid){toast('Escolha ou cadastre o cliente');return newOS(f)}
+  const o={id:uid(),num:String(db.seq++).padStart(4,'0'),cli:cid,veh:v.cli==cid?v.id:'',problema:f.problema,mec:'',status:'Aberta',items:[],desc:0,ck:{},laudo:{data:today()},fotos:[],pags:[],horas:'',pecas:'',aberta:today()};db.orders.push(o);save();go('order',o.id)})}
 function Vorders(){const f=S.f;let l=db.orders.filter(o=>(!f.cli||o.cli==f.cli)&&(!f.vei||o.veh==f.vei)&&(!f.st||(f.st=='abertas'?!['Concluída','Entregue'].includes(o.status):f.st=='receber'?oTot(o)>paid(o):o.status==f.st)));
  const chip=(k,t)=>`<button class="sm ${(f.st||'')==k?'pr':''}" onclick="S.f.st=${k?`'${k}'`:'null'};render()">${t}</button>`;
  return`<div class="bar"><h1>Ordens de serviço</h1><span class="sp"></span><button class="pr" onclick="newOS()">Nova O.S.</button></div>
@@ -830,7 +831,7 @@ async function instalarApp(){
 addEventListener('beforeinstallprompt',e=>{e.preventDefault();INST=e;if(typeof SES!=='undefined'&&SES&&!$('#modal').innerHTML)render()});
 addEventListener('appinstalled',()=>{INST=null;toast('App instalado');if(typeof SES!=='undefined'&&SES)render()});
 if('serviceWorker' in navigator&&/^https?:/.test(location.protocol))addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
-const APP_VER='1.1.0';
+const APP_VER='1.2.0';
 (function(){const f=document.getElementById('ver');if(f)f.textContent='Fio-Mar Gestor · versão '+APP_VER;document.title=document.title})();
 boot();
 </script>
