@@ -267,9 +267,9 @@ const normPl=x=>String(x||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
 const okPl=x=>/^[A-Z]{3}\d[A-Z0-9]\d{2}$/.test(x);
 const pst=t=>{const n=$('#pst');if(n)n.textContent=t};
 const tcase=x=>String(x||'').toLowerCase().replace(/(^|[\s\/-])([a-zà-ú])/g,(m,a,b)=>a+b.toUpperCase());
-let VCB=null;
-function editVeh(id,cb,pre){VCB=cb;const orig=id?vh(id):null,v={...(orig||{}),...(pre||{})};EV=id||null;PLK='';const F=[['cli','Cliente','busca',cliArr(),1,{btn:'Novo cliente',novoTxt:'Cadastrar novo cliente',novo:(t,cur)=>viaModal(x=>editVeh(id,cb,x),cur,set=>editClient(null,n=>set({cli:n.id}),{nome:t}))}],['placa','Placa (pode informar depois)','text',0,0],['modelo','Marca/modelo','text',0,1],['ano','Ano','number'],['km','Quilometragem','number'],['motor','Motor'],['cor','Cor'],['chassi','Chassi'],['obs','Observações','area']];
- modal(id?'Editar veículo':'Novo veículo',F,v,o=>{o.placa=normPl(o.placa)||o.placa.toUpperCase();if(id)Object.assign(orig,o);else{const n={id:uid(),...o};db.vehicles.push(n);if(cb)cb(n)}save();render();if(!id&&cb)toast('Veículo cadastrado')},0,id&&(()=>delVeh(id)));
+let VCB=null,PLG=null;
+function editVeh(id,cb,pre){VCB=cb;if(!pre)PLG=null;const orig=id?vh(id):null,v={...(orig||{}),...(pre||{})};EV=id||null;PLK='';const F=[['cli','Cliente','busca',cliArr(),1,{btn:'Novo cliente',novoTxt:'Cadastrar novo cliente',novo:(t,cur)=>viaModal(x=>editVeh(id,cb,x),cur,set=>editClient(null,n=>set({cli:n.id}),{nome:t}))}],['placa','Placa (pode informar depois)','text',0,0],['modelo','Marca/modelo','text',0,1],['ano','Ano','number'],['km','Quilometragem','number'],['motor','Motor'],['cor','Cor'],['chassi','Chassi'],['obs','Observações','area']];
+ modal(id?'Editar veículo':'Novo veículo',F,v,o=>{o.placa=normPl(o.placa)||o.placa.toUpperCase();if(PLG){try{const f=normPl(o.placa);if(PLG.read&&f.length==7&&[...f].filter((c,j)=>c!=PLG.read[j]).length<=3)plLearn(PLG.ty,PLG.gl,f)}catch(x){}PLG=null}if(id)Object.assign(orig,o);else{const n={id:uid(),...o};db.vehicles.push(n);if(cb)cb(n)}save();render();if(!id&&cb)toast('Veículo cadastrado')},0,id&&(()=>delVeh(id)));
  const pl=$('#modal [name=placa]');pl.setAttribute('autocapitalize','characters');pl.setAttribute('autocomplete','off');pl.maxLength=8;
  pl.closest('label').insertAdjacentHTML('afterend',`<div class="bar" style="margin:-4px 0 12px"><label class="btn sm pr" style="margin:0;color:var(--on)">Escanear placa<input type="file" accept="image/*" capture="environment" class="fi" onchange="scanPlaca(this.files[0]);this.value=''"></label><label class="btn sm" style="margin:0">Da galeria<input type="file" accept="image/*" class="fi" onchange="scanPlaca(this.files[0]);this.value=''"></label><button type="button" class="sm" onclick="buscaPlaca()">Buscar dados</button><span class="muted" id="pst" style="font-size:13px"></span></div><div id="pal" class="bar" style="margin:-6px 0 10px"></div>`);
  pl.addEventListener('input',()=>{pl.value=pl.value.toUpperCase().replace(/[^A-Z0-9-]/g,'');clearTimeout(PT);if(!EV)PT=setTimeout(()=>buscaPlaca(true),700)})}
@@ -314,8 +314,11 @@ async function scanPlacaOld(file){if(!file)return;const status=$('#pst');if(!sta
 /* ---- leitura da placa v2: recorte do usuário -> isola os caracteres -> OCR com votação ---- */
 const dataBlob=u=>{const m=/^data:([^;]+);base64,(.*)$/.exec(u),s=atob(m[2]),a=new Uint8Array(s.length);for(let i=0;i<s.length;i++)a[i]=s.charCodeAt(i);return new Blob([a],{type:m[1]})};
 const plImg=u=>new Promise((ok,no)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=()=>no(new Error('img'));i.src=u});
-function plPN(t){if(t.length!=7)return null;const toL={0:'O',1:'I',2:'Z',4:'A',5:'S',6:'G',7:'T',8:'B'},toN={O:'0',Q:'0',D:'0',I:'1',L:'1',Z:'2',A:'4',S:'5',G:'6',T:'7',B:'8',J:'1'};let o='';
- for(let j=0;j<7;j++){const c=t[j],isD=/\d/.test(c),letter=j<3||(j==4&&!isD);if(letter){if(/[A-Z]/.test(c))o+=c;else if(toL[c])o+=toL[c];else return null}else{if(isD)o+=c;else if(toN[c])o+=toN[c];else return null}}return o}
+function plPN(t,ty){if(t.length!=7)return null;const toL={0:'O',1:'I',2:'Z',4:'A',5:'S',6:'G',7:'T',8:'B'},toN={O:'0',Q:'0',D:'0',I:'1',L:'1',Z:'2',A:'4',S:'5',G:'6',T:'7',B:'8',J:'1'};let o='';
+ for(let j=0;j<7;j++){const c=t[j],isD=/\d/.test(c),letter=j<3||(j==4&&(ty=='m'||(ty!='a'&&!isD)));if(letter){if(/[A-Z]/.test(c))o+=c;else if(toL[c])o+=toL[c];else return null}else{if(isD)o+=c;else if(toN[c])o+=toN[c];else return null}}return o}
+let PLT='m';try{PLT=localStorage.getItem('fm_plt')||'m'}catch(x){}
+const plOk=(p,ty)=>p&&(ty=='m'?/^[A-Z]{3}\d[A-Z]\d{2}$/.test(p):ty=='a'?/^[A-Z]{3}\d{4}$/.test(p):1);
+function plSet(v){PLT=v;try{localStorage.setItem('fm_plt',v)}catch(x){}}
 function plPrep(img){const H=220,k=H/img.height,W=Math.max(8,Math.min(1000,Math.round(img.width*k))),c=document.createElement('canvas');c.width=W;c.height=H;
  const x=c.getContext('2d',{willReadFrequently:true});x.imageSmoothingQuality='high';x.drawImage(img,0,0,W,H);const d=x.getImageData(0,0,W,H).data,n=W*H,g0=new Uint8Array(n),bl=new Uint8Array(n);
  for(let q=0,p=0;q<n;q++,p+=4){const r=d[p],g=d[p+1],b=d[p+2];g0[q]=Math.round(r*.299+g*.587+b*.114);const mx=Math.max(r,g,b),mn=Math.min(r,g,b);
@@ -336,23 +339,45 @@ function plGlyphs(P,mode){const{g,W,H}=P,t=plThr(P,mode),lab=new Int32Array(W*H)
   for(let yy=0;yy<c.h;yy++)for(let xx=0;xx<c.w;xx++){const z=(yy*c.w+xx)*4,on=lab[(c.y+yy)*W+c.x+xx]==c.id?0:255;im.data[z]=im.data[z+1]=im.data[z+2]=on;im.data[z+3]=255}x.putImageData(im,0,0);return m})}
 function plCompose(gl,hh,gp){const gap=Math.round(hh*gp),ws=gl.map(m=>Math.max(1,Math.round(m.width*hh/m.height))),W=ws.reduce((a,b)=>a+b,0)+gap*(gl.length-1)+60,o=document.createElement('canvas');o.width=W;o.height=hh+60;
  const x=o.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,W,o.height);x.imageSmoothingQuality='high';let px=30;gl.forEach((m,i)=>{x.drawImage(m,px,30,ws[i],hh);px+=ws[i]+gap});return o}
+/* ---- banco de caracteres (modelos reais de cada tipo de placa; cresce com o uso) ---- */
+const PGW=24,PGH=36,PLSEED={"m":{"4":["APgAAPwAAPwAAHwAAH4AAH4AAD4AAD8AAD8AgD8AgB8AgB8AwA8AwA8AwA8AwAcA4AcA4AcA4MMH8OMH8OMH+OED+OED+OEH+PMH/P8P/P8f/P8f/P8f/P8f+P8PAOAHAOADAOADAOADAOAD","APAAAPgAAPgAAPwAAHwAAHwAAH4AAH4AAD4AAD8AAD8AAB8AgB8AgB8AgA8AwA8AwAcAwIcH4McH4MMH4MMH8MMH8MEH8OMP+P8f+P8f+P8f+P8f+P8f8P8PAOAHAMAHAMAHAMAHAMAHAMAD"],"5":["+P8P/P8f/P8f/P8f/P8f/IMB/AAA/AAA/AAA/AAA/AAA/AAA/AAA/PAB/P8H/P8H/P8P/P8P/P8P+IMfAIAfAIAfAIAfAIAfAIAfAIAfAIAfAIAf+IAf+IAf+MEf+OMP+P8P+P8P+P8H8P8D","8P8P+P8f+P8f+P8f+P8f+AMA+AEA+AEA+AEA+AEA+AEA+AEA+AEA+PkD+P8H+P8P+P8P+P8P8IcfAIAfAIAfAIAfAIAfAAAfAAAfAAAfAIAf8IEf+IEf+MMf8PcP8P8P8P8H8P8H4P8BwP8A"],"6":["AOADAPADAPgDAPwBAP4BAP4AAH4AAD8AgD8AgB8AwB8AwA8A4A8A4P8B8P8H8P8H8P8P+P8P+OMP+IEf+IEf/IAf/IAf/IAf/IAf/IAf/IAf/IAf/IAf+MEf+MMP+P8P8P8P8P8H4P8DwP8B","AMADAPAHAPADAPgBAPwBAPwAAH4AAH4AAD8AAD8AgB8AwB8AwB8A4P8D4P8H4P8P8P8P8P8f8IMf+IEf+IEf+IEf+AEf+IEf+IEf+IEf+IEf+IEf+IMf8McP8P8P4P8P4P8HwP8DgP8BAP4A"],"Q":["wH8A8P8H+P8P/P8f/P8f/ME//oA/fgA/fgA/fgA/fgA/fgA/fgA/fgA//gA//gB//gB//gB//gB//gB//gB//gB//AB//Dx//H5//P5//Pg//PA//PAf/OAP/OEP/P8P+P8f+P8/8P8/4P9/","wH8A8P8D+P8H/P8P/P8P/sAffoAffoAffoAffoAffoAffoAffoAffoAffoAffoA/foA/foA/foA/foA//gA//gA//r4//v4f/Pwf/Pgf/PAP/PAH/OAH/PsH+P8P8P8P8P8f4P8/wP8/AP8f"],"E":["/P8P/v8f/v8f/v8f/v8f/gAAfgAAfgAAfgAA/gAAfgAAfgAA/gAA/gMA/v8D/P8D/P8D/P8D/P8B/AAA/AAA/AAA/AAA/AAA/AAA/AAA/AAA/AAA/AAA/AAA/AAA/AEQ/P9//P9//P9//P9/","/P8H/v8P/v8P/v8P/v8H/gAAfgAAfgAAfgAAfgAAfgAAfgAA/gAA/v8B/v8B/v8B/v8B/v8B/AAA/AAA/AAA/AAA/AAA/AAA/AAA/AAA/AAA/AAA/AAA/AEA/P8f/P8//P8//P8//P8/+P8f"],"K":["PgAefgAffoAffoAffsAPfuAPfuAHfvADfvADfvgBfvgBfvwAfnwAfn4A/D8A/D8A/B8A/B8A/B8A/D8A9H8A9H8A/H8A/P8A/P8A/PgB/PgBfPADfPADfOAHfOAHfOAPfMAffIAffIA//IA/","PAAGfIAPfIAPfMAPfMAHfOADfOADfPABfPgBfPgAfPwAfHwAfH4A/D8A/B8A/B8A/B8A/B8A/D8A/D8A/H8A/H8A/H8A/P0A/PgA/PgB/PAB/PAD/OAD/OAH/MAH/MAP/IAf/IAf+IAfcAAe"],"A":["AP8AAP8AgP8AgP8BgP8BgP8BgP8BgOcBwOcBwOcDwOcDwOMDwOMDwOMDwOMD4OMD4MMD4MMH4MMH4MEH4MEH8MEH8MEP8MEP8MEP8P8P+P8P+P8P+P8f+P8f+P8f+IAf+AAf/AAf/AA//AA/","AH8AgP8AgP8AgP8AgP8AwP8AwP8AwPcAwPMAwPMBwPMBwOMBwOMB4PMB4OEB4OED4OED4OED4OED8OED8OED8MAH8OEH+OEH+P8H+P8H+P8H+P8P+P8P/MAPfIAPfIAPfIAffIAffIAfeAAP"]},"a":{"3":["/B8A/v8A/v8D//8H//8P//8P/vkPPMAfMIAfAIAfAIAfAIAfAIAfAIAfAIA/APwfAPwfAPgfAPgfAPgfAPg/AAB/AAB+AAB+AAB+AAD88AH88AP88Af+4P//4P//wP//gP//AP5/AOA/AAAA","+B8A/P8D/P8P/v8P/v8f/v8f/MA/QIA/AAA/AAA/AAA/AAA/AAA/AIg/APg/APg/APgfAPgfAPg/AAB/AAB+AAD+AAD+AAH88AP88AP88D/+4P//4P//0P//Yv//w/B/+wEA/wEA/gAA+AAA"],"9":["+H8A/v8B/v8H//8H//8P//8P//8fP8AfP4AfPoAfPoAfPoA/PgA/foA//IA//P8//P8/+P8/8P9/4P9/gP9/AAB/AAB+AAB+AAB+AAB+4AH8+AH88A/+8P//8P//4P//wP//gP9/APg/AAAA","/P8A/v8B//8D//8H//8P//8fP/AfH8AfH4AfP4AfPoAfPoA/PoA/fgA//oA//P8//P8/+P8/+P8/4P8/APx/AAB/AAB+AAB+AAB+AAB+8AB++AH++Af+8P//8P//4P//wP//gP9/APA/AAAA"],"J":["AB8AAD8AAD4AAH4AAH4AAH4AAH4AAHwAAHwAAPwAAPgAAPgAAPgAAPgAAPABAPABAPADAPADAPADAOADAOADAOAHAMAHAMAHAMAHAMAPAIAPfIAPfIAP/O8f/P8f+P8f8P8f4P8fwP8PAPwP","AD4AAD4AAD4AAD4AAH4AAHwAAHwAAHwAAHwAAPwAAPgAAPgAAPgAAPgBAPABAPABAPABAPABAOADAOADAOADAOAHAMAHAMAHAMAPAMAPIIAPfIAP/IAf/P8f+P8f+P8f8P8f4P8fgP8PAPwH"],"U":["DwAAH+ADH+ADPuADPuADPsAHPMAHPMAHfMAHfMAPfIAPeIAP+IAP+IAP+AAf8AAf8AAf8AEf8AEf8AE+4AE+4AM+4AM+4AN8wAN8wAd8wAd8wA/8wH/8gP//AP//AP//AP7/APj/AIA/AAAA","AAAAH+ABH+ADPuADPuADPuADPsAHPMAHPMAHfMAHeIAPeIAP+IAP+IAP+AAP8AAf8AEf8AEf8AE+4AE+4AM+4AM+wAN8wAN8wAd8wAd8wAd8wA/8gP/+gP//AP//AP7/APz/APB/AAAAAAAA"],"Y":["fAAAfAAf/AA//AA/+AA/+AE/8IE/4IM/4Ic/wIcfwI8fgI8fgN8fAP8PAP4PAP4PAPwPAPwPAPgPAPgHAPAHAOAHAOAHAOADAMAHAMAHAMAHAMAHAMAPAMAPAIAPAIAPAIAfAIAfAAAfAAAf","fAAA/AA//AA/+AA/+AE/+AE/8AE/4IM/4Ic/wIc/gI8fgI8fAJ8fAP8fAP4PAP4PAPwPAPgPAPgPAPAHAPAHAOAHAOAHAMAHAMAHAMAHAMAHAMAPAIAPAIAPAIAPAIAPAIAfAIAfAAAfAAAf"]}};
+const plLetters='ABCDEFGHIJKLMNOPQRSTUVWXYZ',plDigits='0123456789';
+function plBits(m){const c=document.createElement('canvas');c.width=PGW;c.height=PGH;const x=c.getContext('2d',{willReadFrequently:true});x.fillStyle='#fff';x.fillRect(0,0,PGW,PGH);x.imageSmoothingQuality='high';
+ let w=Math.max(1,Math.round(m.width*PGH/m.height)),h=PGH;if(w>PGW){h=Math.max(1,Math.round(PGH*PGW/w));w=PGW}x.drawImage(m,Math.floor((PGW-w)/2),Math.floor((PGH-h)/2),w,h);
+ const d=x.getImageData(0,0,PGW,PGH).data,b=new Uint8Array(PGW*PGH/8);for(let i=0;i<PGW*PGH;i++)if(d[i*4]<128)b[i>>3]|=1<<(i&7);return b}
+const plPack=b=>btoa(String.fromCharCode(...b));
+const plUnpack=s=>{if(!/^[A-Za-z0-9+\/=]{144}$/.test(s))return null;const r=atob(s),b=new Uint8Array(r.length);for(let i=0;i<r.length;i++)b[i]=r.charCodeAt(i);return b};
+function plVec(b){const f=new Float32Array(PGW*PGH),o=new Float32Array(PGW*PGH);for(let i=0;i<f.length;i++)f[i]=(b[i>>3]>>(i&7))&1;
+ for(let y=0;y<PGH;y++)for(let x=0;x<PGW;x++){let s=0,n=0;for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const yy=y+dy,xx=x+dx;if(yy>=0&&yy<PGH&&xx>=0&&xx<PGW){s+=f[yy*PGW+xx];n++}}o[y*PGW+x]=s/n}
+ let nr=0;for(const v of o)nr+=v*v;nr=Math.sqrt(nr)||1;for(let i=0;i<o.length;i++)o[i]/=nr;return o}
+const plCache={};
+function plModels(ty){const out=[],add=(src)=>{for(const c in src){if(!/^[A-Z0-9]$/.test(c)||!Array.isArray(src[c]))continue;for(const s of src[c]){const k=ty+c+s;if(!plCache[k]){const b=plUnpack(s);if(!b)continue;plCache[k]=plVec(b)}out.push([c,plCache[k]])}}};
+ add(PLSEED[ty]||{});add(((db.plg||{})[ty])||{});return out}
+function plMatch(m,ty,allowed){const ms=plModels(ty);if(!ms.length)return null;const v=plVec(plBits(m));let best=null,sec=0;const per={};
+ for(const[c,w]of ms){if(!allowed.includes(c))continue;let s=0;for(let i=0;i<v.length;i++)s+=v[i]*w[i];if(!(c in per)||s>per[c])per[c]=s}
+ const l=Object.entries(per).sort((a,b)=>b[1]-a[1]);if(!l.length)return null;return{c:l[0][0],sim:l[0][1],gap:l[0][1]-(l[1]?l[1][1]:0)}}
+const plAllowed=(j,ty)=>(j<3||(j==4&&ty=='m'))?plLetters:plDigits;
+function plLearn(ty,gl,placa){if(!/^[A-Z]{3}\d[A-Z0-9]\d{2}$/.test(placa)||gl.length!=7)return;if(ty=='m'?!/^[A-Z]{3}\d[A-Z]\d{2}$/.test(placa):!/^[A-Z]{3}\d{4}$/.test(placa))return;
+ const g=db.plg=db.plg||{},t=g[ty]=g[ty]||{};gl.forEach((m,j)=>{const c=placa[j],s=plPack(plBits(m));const l=t[c]=t[c]||[];if(l.includes(s))return;l.push(s);while(l.length>4)l.shift()})}
 function plShow(best,alts,auto){const el=$('#modal [name=placa]');if(!el)return;el.value=best;el.dispatchEvent(new Event('input',{bubbles:true}));PLK='';
  const pal=$('#pal');if(pal&&!auto)pal.innerHTML='<span class="muted" style="font-size:13px">Outras leituras:</span>'+alts.filter(a=>a!=best).map(a=>`<button type="button" class="sm" onclick="plPick('${a}')">${a}</button>`).join('');
  if(auto){pst('Placa lida: '+best+'. Consultando dados...');buscaPlaca()}else pst('Leitura provável: '+best+'. Confira os caracteres (se estiver diferente, toque na leitura certa) e toque em Buscar dados.')}
 function plPick(a){const el=$('#modal [name=placa]');if(!el)return;el.value=a;el.dispatchEvent(new Event('input',{bubbles:true}));PLK='';pst('Placa: '+a+'. Toque em Buscar dados.')}
-async function plLer(u){const pal=$('#pal');if(pal)pal.innerHTML='';pst('Lendo a placa...');let w=null;
+async function plLer(u,ty){const pal=$('#pal');if(pal)pal.innerHTML='';pst('Lendo a placa...');let w=null;
  try{const img=await plImg(u);await loadTess();w=await Tesseract.createWorker('eng');await w.setParameters({tessedit_char_whitelist:'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',preserve_interword_spaces:'1'});
-  const P=plPrep(img),C=[];let achou=0;
-  for(const mode of ['otsu',20,25]){const gl=plGlyphs(P,mode);if(!gl)continue;achou++;
-   for(const gp of [.18,.35])for(const psm of ['7','8']){await w.setParameters({tessedit_pageseg_mode:psm});const r=await w.recognize(plCompose(gl,70,gp)),t=String(r.data.text||'').toUpperCase().replace(/[^A-Z0-9]/g,''),p=plPN(t)||(plateFrom(t)||{}).p;if(p)C.push(p)}}
+  const P=plPrep(img),C=[];let achou=0,g7=null;PLG=null;
+  for(const mode of ['otsu',20,25]){const gl=plGlyphs(P,mode);if(!gl)continue;achou++;if(!g7&&gl.length==7)g7=gl;
+   for(const gp of [.18,.35])for(const psm of ['7','8']){await w.setParameters({tessedit_pageseg_mode:psm});const r=await w.recognize(plCompose(gl,70,gp)),t=String(r.data.text||'').toUpperCase().replace(/[^A-Z0-9]/g,''),p=plPN(t,ty)||(plOk((plateFrom(t)||{}).p,ty)?plateFrom(t).p:null);if(p)C.push(p)}}
   if(!document.body.contains($('#pst')))return;
   if(!C.length){if(!achou){pst('Não achei os caracteres. Tentando outro método...');await w.terminate();w=null;return scanPlacaOld(dataBlob(u))}return pst('Não consegui ler. Corte mais justo na placa, de frente e sem reflexo, ou digite a placa.')}
   const cnt={};C.forEach(c=>cnt[c]=(cnt[c]||0)+1);const rank=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a]);
   let best='';for(let j=0;j<7;j++){const v={};C.forEach(c=>v[c[j]]=(v[c[j]]||0)+1);best+=Object.keys(v).sort((a,b)=>v[b]-v[a])[0]}
-  const alts=[best,...rank].filter((x,i,a)=>a.indexOf(x)==i).slice(0,4),sure=C.length>=4&&(cnt[best]||0)/C.length>=.6;plShow(best,alts,sure)
+  let sure=C.length>=4&&(cnt[best]||0)/C.length>=.6;const tb=best;
+  if(g7){PLG={ty,gl:g7};let tm=0,ok=0;const arr=[...best];g7.forEach((m,j)=>{const r=plMatch(m,ty,plAllowed(j,ty));if(r&&r.sim>=.8){tm++;if(arr[j]==r.c)ok++;else arr[j]=r.c}});best=arr.join('');if(tm==7&&best!=tb)sure=0;if(tm==7&&ok==7)sure=1}
+  if(PLG)PLG.read=best;const alts=[best,tb,...rank].filter((x,i,a)=>a.indexOf(x)==i).slice(0,4);plShow(best,alts,sure)
  }catch(x){pst('Falha na leitura da foto. Tente outra imagem ou digite a placa.')}finally{if(w)try{await w.terminate()}catch(x){}}}
 function scanPlaca(file){if(!file)return;const cur=modalVals();
- viaModal(x=>editVeh(EV,VCB,x),cur,set=>cropImg(file,{max:1400,src:2400,plate:1,title:'Corte só a placa',hint:'Arraste os cantos até a caixa ficar só em volta dos caracteres da placa (sem o para-choque). Quanto mais justo, melhor a leitura.',ok:'Ler placa'},u=>{set({});plLer(u)}))}
+ viaModal(x=>editVeh(EV,VCB,x),cur,set=>cropImg(file,{max:1400,src:2400,plate:1,extra:1,title:'Corte só a placa',hint:'Arraste os cantos até a caixa ficar só em volta dos caracteres da placa (sem o para-choque). Quanto mais justo, melhor a leitura.',ok:'Ler placa'},(u,rd,ty)=>{set({});plLer(u,ty||PLT)}))}
 function Vvehicles(){return`<div class="bar"><h1>Veículos</h1><span class="sp"></span><button class="pr" onclick="editVeh()">Novo veículo</button></div>`+
  (db.vehicles.map(v=>`<div class="row" onclick="editVeh('${v.id}')"><div>${e(vlabel(v))} <span class="muted">${e(v.ano)} ${e(v.cor)}</span><small>${e(cl(v.cli).nome)} — ${e(v.km)} km ${e(v.motor)}</small></div><div class="r"><button class="sm" onclick="event.stopPropagation();go('orders',0,0,{vei:'${v.id}'})">Histórico</button></div></div>`).join('')||'<p class="muted">Nenhum veículo cadastrado.</p>')}
 
@@ -515,6 +540,7 @@ function cropImg(file,opt,done){if(!file)return;
  if(typeof file=='string')return go(file);const r=new FileReader();r.onload=()=>go(r.result);r.readAsDataURL(file)}
 function cropOpen(){const C=CR,s=Math.min((innerWidth-56)/C.src.width,Math.min(innerHeight*.48,460)/C.src.height,4),w=Math.round(C.src.width*s),h=Math.round(C.src.height*s);
  $('#modal').innerHTML=`<div class="ov"><div class="md"><h2 style="margin-top:0">${e((C.opt&&C.opt.title)||'Ajustar imagem')}</h2><p class="muted" style="margin:0 0 10px">${e((C.opt&&C.opt.hint)||'Arraste os cantos ou as bordas para escolher a área. Arraste por dentro para mover.')}</p><div style="display:flex;justify-content:center"><canvas id="crc" width="${w}" height="${h}" style="touch-action:none;max-width:100%;background:#8a949c;border-radius:6px"></canvas></div>
+ ${C.opt&&C.opt.extra?`<div class="bar" style="margin:10px 0 0"><span class="muted" style="font-size:13px">Tipo da placa:</span><label style="margin:0;display:flex;gap:6px;align-items:center"><input type="radio" name="plt" value="m" ${PLT=='m'?'checked':''} onchange="plSet(this.value)" style="width:auto"> Mercosul (faixa azul)</label><label style="margin:0;display:flex;gap:6px;align-items:center"><input type="radio" name="plt" value="a" ${PLT=='a'?'checked':''} onchange="plSet(this.value)" style="width:auto"> Antiga (cinza)</label></div>`:''}
  <div class="bar" style="margin:10px 0">${[['free','Livre'],['sq','Quadrado'],['round','Redondo'],['43','4:3'],['169','16:9'],['31','3:1']].map(([k,n])=>`<button type="button" class="sm" data-k="${k}" onclick="cropShape('${k}')">${n}</button>`).join('')}<button type="button" class="sm" onclick="cropRot()">Girar</button><button type="button" class="sm" onclick="cropShape('free',1)">Imagem inteira</button></div>
  <div class="bar" style="margin:6px 0 0"><button type="button" onclick="closeM()">Cancelar</button><span class="sp"></span><button type="button" class="pr" onclick="cropOk()">${e((C.opt&&C.opt.ok)||'Cortar e salvar')}</button></div></div></div>`;
  C.b=null;cropBind();cropShape(C.sh);if(C.init){C.init=0;const cv=$('#crc'),W=cv.width,H=cv.height;C.b={x:W*.06,y:H*.3,w:W*.88,h:H*.4};cropDraw()}}
@@ -543,7 +569,7 @@ function cropOk(){const C=CR,cv=$('#crc'),b=C.b,kx=C.src.width/cv.width,ky=C.src
  out.width=Math.max(1,Math.round(sw*m));out.height=Math.max(1,Math.round(sh*m));const x=out.getContext('2d');if(o.white){x.fillStyle='#fff';x.fillRect(0,0,out.width,out.height)}
  if(rd){x.save();x.beginPath();x.ellipse(out.width/2,out.height/2,out.width/2,out.height/2,0,0,Math.PI*2);x.clip()}
  x.drawImage(C.src,sx,sy,sw,sh,0,0,out.width,out.height);if(rd)x.restore();
- closeM();C.done(out.toDataURL(o.png||(rd&&!o.white)?'image/png':'image/jpeg',.92),rd)}
+ closeM();C.done(out.toDataURL(o.png||(rd&&!o.white)?'image/png':'image/jpeg',.92),rd,PLT)}
 const cropOpt=k=>({max:k=='logo'?800:600,png:k=='logo',white:k=='assin'});
 const cfgSet=(k,d,rd)=>{const c=db.cfg=db.cfg||{};c[k]=d;if(k=='logo')c.logoRound=!!rd;save();render();toast('Imagem salva')};
 function cfgImg(k,f){cropImg(f,cropOpt(k),(d,rd)=>cfgSet(k,d,rd))}
@@ -903,7 +929,7 @@ async function instalarApp(){
 addEventListener('beforeinstallprompt',e=>{e.preventDefault();INST=e;if(typeof SES!=='undefined'&&SES&&!$('#modal').innerHTML)render()});
 addEventListener('appinstalled',()=>{INST=null;toast('App instalado');if(typeof SES!=='undefined'&&SES)render()});
 if('serviceWorker' in navigator&&/^https?:/.test(location.protocol))addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
-const APP_VER='1.4.0';
+const APP_VER='1.5.0';
 (function(){const f=document.getElementById('ver');if(f)f.textContent='Fio-Mar Gestor · versão '+APP_VER;document.title=document.title})();
 boot();
 </script>
