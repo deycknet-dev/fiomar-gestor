@@ -2,7 +2,7 @@
    Sempre busca a versão mais nova no servidor (GitHub Pages).
    Só usa a cópia guardada no celular quando estiver sem internet.
    Ao publicar uma versão nova, mude o número abaixo junto com o index.html. */
-const VERSAO = '1.8.3';
+const VERSAO = '1.8.4';
 const CACHE = 'fiomar-' + VERSAO;
 const BASE = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './apple-touch-icon.png'];
 
