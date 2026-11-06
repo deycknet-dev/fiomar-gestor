@@ -236,7 +236,7 @@ function save(){DIRTY=true;clearTimeout(TS);TS=setTimeout(push,700);guardaLocal(
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState=='hidden'&&DIRTY){clearTimeout(TS);push()}});
 addEventListener('pagehide',()=>{if(DIRTY){clearTimeout(TS);push()}});
 async function boot(){const c=cfg0();
- if(c.url&&c.key&&window.supabase){SB=window.supabase.createClient(c.url,c.key);const{data}=await SB.auth.getSession();if(data.session){SES=data.session;await gate();if(!PEND){await pull();await recPend()}}}
+ if(c.url&&c.key&&window.supabase){SB=window.supabase.createClient(c.url,c.key);const{data}=await SB.auth.getSession();if(data.session){SES=data.session;await gate();if(!PEND){await pull();await recPend();setTimeout(()=>{fqRun();fmigra()},2500)}}}
  render();setTimeout(entAutoSync,3000)}
 function setMode(m){AM=m;authView()}
 function authView(){const c=cfg0();$('#nav').style.display='none';
@@ -270,14 +270,14 @@ async function signup(){const em=$('#le').value.trim(),pw=$('#lp').value,p2=$('#
  if(pw!==p2)return m.textContent='As senhas não são iguais.';
  const{data,error}=await SB.auth.signUp({email:em,password:pw,options:{data:{nome:($('#ln')||{}).value||''},emailRedirectTo:location.href.split('#')[0]}});
  if(error){const t=error.message;m.textContent=/already/i.test(t)?'Este e-mail já tem conta. Use a aba Entrar.':/not allowed|disabled/i.test(t)?'O cadastro de novas contas está desativado no Supabase.':/password/i.test(t)?'Senha fraca. Use ao menos 8 caracteres, com letras e números.':'Erro: '+t;return}
- if(data.session){SES=data.session;await gate();if(!PEND)await pull();S.v='dash';render()}
+ if(data.session){SES=data.session;await gate();if(!PEND){await pull();await recPend();setTimeout(()=>{fqRun();fmigra()},2500)}S.v='dash';render()}
  else{m.style.color='var(--ac)';m.textContent='Conta criada. Enviamos um link de confirmação para '+em+'. Confirme o e-mail, entre e aguarde a liberação do administrador.'}}
 function saveCfg(){const url=$('#su').value.trim().replace(/\/$/,''),key=$('#sk').value.trim();if(!/^https:\/\/.+/.test(url)||key.length<20)return toast('Informe a URL e a chave anon do projeto');localStorage.setItem(SBK,JSON.stringify({url,key}));boot()}
 function resetCfg(){localStorage.removeItem(SBK);SB=null;boot()}
 async function login(){const em=$('#le').value.trim(),pw=$('#lp').value;$('#lerr').textContent='';if(!em||!pw){$('#lerr').textContent='Informe e-mail e senha.';return}
  const{data,error}=await SB.auth.signInWithPassword({email:em,password:pw});
  if(error){if(/not confirmed/i.test(error.message)){$('#lerr').innerHTML='Confirme o e-mail pelo link enviado antes de entrar. <a href="#" onclick="resend();return false">Reenviar e-mail</a>';return}$('#lerr').textContent=/invalid/i.test(error.message)?'E-mail ou senha incorretos.':'Erro: '+error.message;return}
- SES=data.session;await gate();if(!PEND)await pull();S.v='dash';render()}
+ SES=data.session;await gate();if(!PEND){await pull();await recPend();setTimeout(()=>{fqRun();fmigra()},2500)}S.v='dash';render()}
 async function doOut(){clearTimeout(TS);await push();await SB.auth.signOut();SES=null;ADM=false;LASTV=null;CONF=false;DIRTY=false;db=load();S.v='dash';render()}
 function dlBlob(b,n){const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=n;document.body.appendChild(a);a.click();a.remove();toast('PDF baixado')}
 function toast(t){const o=$('#toast');o.textContent=t;o.style.display='block';setTimeout(()=>o.style.display='none',2400)}
@@ -521,7 +521,7 @@ function Vquote(){const q=S.q,vs=db.vehicles.filter(v=>v.cli==q.cli),ro=q.status
  <label>Observações / problema relatado<textarea onchange="qs('obs',this.value)">${e(q.obs)}</textarea></label></div>
  <div class="card"><table><tr><th>Item</th><th class="n">Qtd</th><th class="n">Total</th><th></th></tr>${q.items.map((i,n)=>`<tr style="cursor:pointer" onclick="editItem(S.q,${n},0)"><td>${e(i.d)}<br><small class="muted">${e(i.t)} — ${R(i.v)}</small></td><td class="n">${i.q}</td><td class="n">${R(i.q*i.v)}</td><td style="white-space:nowrap"><button class="sm" aria-label="Editar item" onclick="event.stopPropagation();editItem(S.q,${n},0)">✎</button> <button class="sm" aria-label="Remover item" onclick="event.stopPropagation();S.q.items.splice(${n},1);render()">×</button></td></tr>`).join('')||'<tr><td colspan="4" class="muted">Adicione serviços, peças e mão de obra.</td></tr>'}</table>
  <div class="bar" style="margin-top:10px"><button onclick="addItem(S.q)">Adicionar item</button><button onclick="addStock(S.q,0)">Peça do estoque</button><span class="sp"></span><span class="muted">Total</span><span class="tot" id="qt">${R(sum(q.items,q.desc))}</span></div></div>
- <div class="card"><div class="bar" style="margin:0 0 8px"><b>Fotos do orçamento</b><span class="sp"></span><div class="fbs">${fotoBtns('qFotos([...this.files])')}</div></div><div class="ph">${(q.fotos||[]).map((f,i)=>`<figure><img src="${f.src}" alt="Foto ${i+1}"><figcaption><input value="${e(f.obs)}" placeholder="Legenda" onchange="S.q.fotos[${i}].obs=this.value"><button class="sm" style="margin-top:4px" onclick="S.q.fotos.splice(${i},1);render()">Remover</button></figcaption></figure>`).join('')}</div></div>
+ <div class="card"><div class="bar" style="margin:0 0 8px"><b>Fotos do orçamento</b><span class="sp"></span><div class="fbs">${fotoBtns('qFotos([...this.files])')}</div></div><div class="ph">${(q.fotos||[]).map((f,i)=>`<figure><img ${fimg(f.src)} alt="Foto ${i+1}" onclick="verFoto(this.src)"><figcaption><input value="${e(f.obs)}" placeholder="Legenda" onchange="S.q.fotos[${i}].obs=this.value"><button class="sm" style="margin-top:4px" onclick="S.q.fotos.splice(${i},1);render()">Remover</button></figcaption></figure>`).join('')}</div></div>
  <div class="card"><b>Termos de aprovação</b><p class="muted">${TERMOS}</p>${q.aprov?`<p>Aprovado por <b>${e(q.aprov.nome)}</b> em ${D(q.aprov.data)}.</p>`:''}</div>
  <div class="bar"><button onclick="saveQuote()">Salvar</button><button class="pr" onclick="genPDF(S.q)">Gerar PDF</button>${q.novo?'':'<button class="dg" onclick="confirmDel(this,delQuote)">Excluir</button>'}<button class="wa" onclick="waQuote()">Enviar por WhatsApp</button>${ro?'':`<button onclick="approve()">Registrar aprovação</button><button onclick="S.q.status='Recusado';saveQuote();render()">Marcar recusado</button>`}${ro&&!q.os?`<button class="pr" onclick="makeOS()">Gerar O.S.</button>`:''}${q.os?`<button class="pr" onclick="go('order','${q.os}')">Abrir O.S.</button>`:''}</div>`}
 
@@ -533,8 +533,8 @@ const U=(k,v)=>{od(S.id)[k]=v;save();osTabsRefresh()},UG=(g,k,v)=>{od(S.id)[g][k
 function osTabsRefresh(){const o=od(S.id);if(!o||!$('#ostabs'))return;const ti=osTabInfo(o);document.querySelectorAll('#ostabs .ost').forEach((b,i)=>{const s1=b.querySelector('.s'),x=ti[OSORD[i]];if(s1&&x){s1.textContent=x[0];s1.style.color=x[1]}})}
 function pic(file,cb){const r=new FileReader();r.onload=()=>{const i=new Image();i.onload=()=>{const k=Math.min(1,900/Math.max(i.width,i.height)),c=document.createElement('canvas');c.width=i.width*k;c.height=i.height*k;c.getContext('2d').drawImage(i,0,0,c.width,c.height);cb(c.toDataURL('image/jpeg',.6))};i.onerror=()=>toast('Não foi possível abrir esta foto. Tente outra imagem.');i.src=r.result};r.readAsDataURL(file)}
 function ckSet(n,k,v){const o=od(S.id);(o.ck[n]=o.ck[n]||{})[k]=v;save();osTabsRefresh()}
-function ckFoto(n,f){if(f)pic(f,d=>{ckSet(n,'foto',d);render()})}
-function addFotos(fs){const o=od(S.id),t=$('#ft').value;[...fs].forEach(f=>pic(f,d=>{o.fotos.push({id:uid(),t,src:d,obs:''});save();render()}))}
+function ckFoto(n,f){if(f)picRef(f,d=>{ckSet(n,'foto',d);render()})}
+function addFotos(fs){const o=od(S.id),t=$('#ft').value;[...fs].forEach(f=>picRef(f,d=>{o.fotos.push({id:uid(),t,src:d,obs:''});save();render()}))}
 function addPag(){const o=od(S.id);modal('Registrar pagamento',[['forma','Forma','select',FP],['valor','Valor pago (R$)','number',0,1],['parc','Parcelas (se parcelado)','number'],['data','Data','date',0,1]],{valor:Math.max(0,oTot(o)-paid(o)),data:today(),parc:1},p=>{const v=+p.valor,rest=oTot(o)-paid(o);if(!(v>0))return toast('Informe um valor maior que zero');if(v>rest+0.005)return toast('Valor maior que o restante da O.S. ('+R(Math.max(0,rest))+')');o.pags.push({...p,valor:v});save();render()})}
 function waOS(){const o=od(S.id),c=cl(o.cli),v=o.veh?vlabel(vh(o.veh)):'';
  waDoc(genOS,o,c.tel,`Olá, ${c.nome}! Tudo bem?\n\nEsse documento é a ordem de serviço Nº ${o.num}${v?' do seu '+v:''}, com os serviços e peças registrados.\nSituação: ${o.status}\nValor total: ${R(oTot(o))}\n\nQualquer dúvida, estou à disposição.\n\n${empNome()}`)}
@@ -544,10 +544,10 @@ function Vorder(){const o=od(S.id);if(!o)return Vorders();const T=[['resumo','Re
  <label>Problema relatado<textarea onchange="U('problema',this.value)">${e(o.problema)}</textarea></label><label>Peças utilizadas<textarea onchange="U('pecas',this.value)">${e(o.pecas)}</textarea></label></div>
  <div class="card"><b>Serviços autorizados</b> <small class="muted">Toque no item para editar</small><table>${o.items.map((i,n)=>`<tr style="cursor:pointer" onclick="editItem(od(S.id),${n},1)"><td>${e(i.d)}<br><small class="muted">${e(i.t)}${i.q!=1?' · '+R(i.v)+' cada':''}</small></td><td class="n">${i.q}x</td><td class="n">${R(i.q*i.v)}</td><td style="white-space:nowrap"><button class="sm" aria-label="Editar item" onclick="event.stopPropagation();editItem(od(S.id),${n},1)">✎</button> <button class="sm" aria-label="Remover item" onclick="event.stopPropagation();rmOS(${n})">×</button></td></tr>`).join('')||'<tr><td class="muted">Nenhum item.</td></tr>'}</table>
  <div class="bar" style="margin-top:10px"><button onclick="addItem(od(S.id))">Adicionar item</button><button onclick="addStock(od(S.id),1)">Peça do estoque</button><button onclick="genOS(od(S.id))">Gerar PDF da O.S.</button><span class="sp"></span><span class="tot">${R(oTot(o))}</span></div></div>`;
- if(S.tab=='check')b=`<div class="bar"><button class="pr" onclick="genChecklist(od(S.id))">Gerar PDF do checklist</button></div><div class="card">${CK.map((n,i)=>{const c=o.ck[n]||{};return`<div class="ck"><b>${n}</b><select onchange="ckSet('${n}','s',this.value)">${['—','OK','Atenção','Defeito'].map(x=>`<option ${c.s==x?'selected':''}>${x}</option>`).join('')}</select><input type="text" placeholder="Observação" value="${e(c.obs)}" onchange="ckSet('${n}','obs',this.value)"><div class="fbs">${c.foto?`<img class="ckimg" src="${c.foto}" height="34" alt="foto de ${e(n)}" onclick="verFoto(this.src)">`:''}${fotoBtns(`ckFoto('${n}',this.files[0])`,{ico:1,um:1})}</div></div>`}).join('')}</div>`;
+ if(S.tab=='check')b=`<div class="bar"><button class="pr" onclick="genChecklist(od(S.id))">Gerar PDF do checklist</button></div><div class="card">${CK.map((n,i)=>{const c=o.ck[n]||{};return`<div class="ck"><b>${n}</b><select onchange="ckSet('${n}','s',this.value)">${['—','OK','Atenção','Defeito'].map(x=>`<option ${c.s==x?'selected':''}>${x}</option>`).join('')}</select><input type="text" placeholder="Observação" value="${e(c.obs)}" onchange="ckSet('${n}','obs',this.value)"><div class="fbs">${c.foto?`<img class="ckimg" ${fimg(c.foto)} height="34" alt="foto de ${e(n)}" onclick="verFoto(this.src)">`:''}${fotoBtns(`ckFoto('${n}',this.files[0])`,{ico:1,um:1})}</div></div>`}).join('')}</div>`;
  if(S.tab=='laudo')b=Vlaudo(o);
  if(S.tab=='fotos')b=`<div class="card"><div class="bar"><select id="ft" style="width:auto;margin:0">${FT.map(x=>`<option>${x}</option>`).join('')}</select><span class="sp"></span><div class="fbs">${fotoBtns('addFotos([...this.files])',{cls:''})}</div></div></div>
- <div class="ph">${o.fotos.map((f,i)=>`<figure><img src="${e(f.src)}" alt="${e(f.t)}"><figcaption><b>${e(f.t)}</b><br><input value="${e(f.obs)}" placeholder="Observação" onchange="od(S.id).fotos[${i}].obs=this.value;save()"><button class="sm" style="margin-top:4px" onclick="od(S.id).fotos.splice(${i},1);save();render()">Remover</button></figcaption></figure>`).join('')}</div>${o.fotos.length?'':'<p class="muted">As fotos ficam vinculadas a esta O.S. como prova do que foi encontrado e executado.</p>'}`;
+ <div class="ph">${o.fotos.map((f,i)=>`<figure><img ${fimg(f.src)} alt="${e(f.t)}" onclick="verFoto(this.src)"><figcaption><b>${e(f.t)}</b><br><input value="${e(f.obs)}" placeholder="Observação" onchange="od(S.id).fotos[${i}].obs=this.value;save()"><button class="sm" style="margin-top:4px" onclick="od(S.id).fotos.splice(${i},1);save();render()">Remover</button></figcaption></figure>`).join('')}</div>${o.fotos.length?'':'<p class="muted">As fotos ficam vinculadas a esta O.S. como prova do que foi encontrado e executado.</p>'}`;
  if(S.tab=='nf')b=Vnf(o);
  if(['resumo','nf','pag'].includes(S.tab))b=nfAviso(o)+b;
  if(S.tab=='pag'){const rest=oTot(o)-paid(o);b=`<div class="card"><table><tr><td>Total</td><td class="n">${R(oTot(o))}</td></tr><tr><td>Valor pago</td><td class="n">${R(paid(o))}</td></tr><tr><td><b>Valor restante</b></td><td class="n"><b>${R(rest)}</b></td></tr></table>
@@ -589,7 +589,7 @@ function delOS(){const id=S.id;if(NF().some(n=>n.os==id&&n.modo=='api'&&['autori
 function backup(){const t=JSON.stringify(db);const ok=()=>toast('Backup copiado ('+Math.round(t.length/1024)+' KB). Cole em um arquivo seguro.');(navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(ok,()=>modal('Backup',[['b','Copie todo o texto abaixo','area']],{b:t},()=>{}))}
 function restore(){modal('Restaurar backup',[['b','Cole aqui o texto do backup','area']],{},o=>{try{const d=JSON.parse(o.b);if(!d.clients||!d.orders||!d.quotes||!d.vehicles)throw 0;db=cleanDb(d);save();render();toast('Backup restaurado')}catch(x){toast('Texto de backup inválido')}},'<p class="muted">Isto substitui todos os dados atuais.</p>')}
 const CFG0={pagto:'Dinheiro, cartão de crédito, cartão de débito, pix ou link de pagamento.',garantia:'3 meses de garantia.'};
-function qFotos(fs){S.q.fotos=S.q.fotos||[];[...fs].forEach(f=>pic(f,d=>{S.q.fotos.push({src:d,obs:''});render()}))}
+function qFotos(fs){S.q.fotos=S.q.fotos||[];[...fs].forEach(f=>picRef(f,d=>{S.q.fotos.push({src:d,obs:''});render()}))}
 function editCfg(){const c=db.cfg||{};modal('Dados da oficina',[['nome','Nome fantasia','text',0,1],['razao','Razão social'],['cnpj','CNPJ'],['end','Endereço'],['cidade','Cidade, UF e CEP'],['email','E-mail','email'],['tel1','Telefone 1','tel'],['tel2','Telefone 2','tel'],['pixtipo','Tipo da chave PIX','select',['Telefone','CPF/CNPJ','E-mail','Chave aleatória']],['pix','Chave PIX'],['pixnome','Nome do favorecido do PIX'],['pagto','Meios de pagamento','area'],['garantia','Condições da garantia','area'],['resp','Responsável (assinatura)']],{...CFG0,...c},o=>{db.cfg={...c,...o};save();render()})}
 /* ---------- Editor de imagem (cortar) ---------- */
 let CR=null;
@@ -679,7 +679,7 @@ function mkDoc(title,num,meta,opt){
  const tx=Z.tx=(s,x,yy,t={})=>{d.setFont('helvetica',t.b?'bold':'normal');d.setFontSize(t.s||10);d.setTextColor(...(t.c||(t.g?PC.mu:PC.tx)));d.text(String(s),x,yy,t.a?{align:t.a}:undefined)};
  const lines=Z.lines=(s,w,sz,b)=>{d.setFont('helvetica',b?'bold':'normal');d.setFontSize(sz);return d.splitTextToSize(String(s),w)};
  Z.need=h=>{if(Z.y+h>(Z.maxY||278)){d.addPage();Z.y=opt&&opt.custom?18:22;return 1}return 0};
- Z.img=(s,x,yy,mw,mh)=>{try{const p=d.getImageProperties(s),k=Math.min(mw/p.width,mh/p.height);d.addImage(s,p.fileType,x,yy,p.width*k,p.height*k);return p.height*k}catch(er){return 0}};
+ Z.img=(s,x,yy,mw,mh)=>{s=fdata(s);if(!s)return 0;try{const p=d.getImageProperties(s),k=Math.min(mw/p.width,mh/p.height);d.addImage(s,p.fileType,x,yy,p.width*k,p.height*k);return p.height*k}catch(er){return 0}};
  /* cabeçalho */
  if(!(opt&&opt.custom)){let lw=0,lh=0;if(c.logo){try{const p=d.getImageProperties(c.logo),k=Math.min(40/p.width,26/p.height);lw=p.width*k;lh=p.height*k}catch(er){}}
  const hx=lw?M+lw+10:M,inf=[[c.razao,c.cnpj&&'CNPJ '+c.cnpj],[c.end,c.cidade],[c.tel1,c.tel2,c.email]].map(a=>a.filter(Boolean).join('  ·  ')).filter(Boolean).flatMap(s=>lines(s,128-hx,8.5)),HB=Math.max(40,22+inf.length*4.2+5,lh+16);
@@ -726,7 +726,7 @@ const itemTab=(Z,items)=>{const cols=[{h:'Descrição',w:.52},{h:'Qtd',w:.1,a:'c
  if(sv.length){Z.sec('Serviços (mão de obra)');Z.table(cols,sv.map(row))}if(pc.length){Z.sec('Peças e materiais');Z.table(cols,pc.map(row))}
  return[sv.length&&['Serviços',R(S1)],pc.length&&['Peças',R(S2)]].filter(Boolean)};
 async function genPDF(q){
- if(noLib())return;if(!q.items.length)return toast('Adicione ao menos um item');saveQuote(1);render();
+ if(noLib())return;await fpre(q);if(!q.items.length)return toast('Adicione ao menos um item');saveQuote(1);render();
  const cli=cl(q.cli),v=vh(q.veh),Z=mkDoc('ORÇAMENTO',`Nº ${q.n}-${new Date().getFullYear()}`,['Emissão: '+D(today()),q.prazo&&'Prazo: '+q.prazo]);
  Z.parties(cli,v);const rows=itemTab(Z,q.items);if(+q.desc)rows.push(['Desconto','-'+R(q.desc)]);Z.totals(rows,'TOTAL',R(sum(q.items,q.desc)));
  Z.sec('Condições');Z.pay(q.prazo);Z.note('Observações',q.obs);
@@ -735,7 +735,7 @@ async function genPDF(q){
  const F=q.fotos||[];if(F.length){Z.sec('Fotos');Z.photos(F)}
  await Z.end(`Orcamento-${q.n}-${(cli.nome||'cliente').replace(/[^\w]+/g,'_')}`)}
 async function genOS(o){
- if(noLib())return;const cli=cl(o.cli),v=vh(o.veh),Z=mkDoc('ORDEM DE SERVIÇO','Nº '+o.num,[o.aberta&&'Entrada: '+D(o.aberta),'Situação: '+o.status,o.mec&&'Mecânico: '+o.mec]);
+ if(noLib())return;await fpre(o);const cli=cl(o.cli),v=vh(o.veh),Z=mkDoc('ORDEM DE SERVIÇO','Nº '+o.num,[o.aberta&&'Entrada: '+D(o.aberta),'Situação: '+o.status,o.mec&&'Mecânico: '+o.mec]);
  Z.parties(cli,v);Z.note('Problema relatado pelo cliente',o.problema);
  if(!o.items.length)Z.note('Serviços','Nenhum item lançado.');
  const rows=itemTab(Z,o.items);if(+o.desc)rows.push(['Desconto','-'+R(o.desc)]);
@@ -744,7 +744,7 @@ async function genOS(o){
  Z.sign({n:Z.c.nome,r:Z.c.resp||'Oficina',sig:1},{n:cli.nome,r:'Autorizo a execução dos serviços'});
  await Z.end(fname('OS',o))}
 async function genChecklist(o){
- if(noLib())return;const cli=cl(o.cli),v=vh(o.veh),Z=mkDoc('CHECKLIST DO VEÍCULO','O.S. '+o.num,['Data: '+D(today()),o.mec&&'Vistoriador: '+o.mec]),{d,tx,W,M,CW}=Z;
+ if(noLib())return;await fpre(o);const cli=cl(o.cli),v=vh(o.veh),Z=mkDoc('CHECKLIST DO VEÍCULO','O.S. '+o.num,['Data: '+D(today()),o.mec&&'Vistoriador: '+o.mec]),{d,tx,W,M,CW}=Z;
  const SCo={OK:[30,130,80],'Atenção':[217,119,6],Defeito:[180,60,40]},V3=['OK','Atenção','Defeito'],k=s=>CK.filter(n=>(o.ck[n]||{}).s==s).length,n0=CK.filter(n=>V3.includes((o.ck[n]||{}).s)).length;
  Z.parties(cli,v);
  const st=[['VERIFICADOS',n0+'/'+CK.length,PC.dk],['OK',k('OK'),SCo.OK],['ATENÇÃO',k('Atenção'),SCo['Atenção']],['DEFEITO',k('Defeito'),SCo.Defeito]],bw=(CW-9)/4;Z.need(26);
@@ -1275,6 +1275,51 @@ function entTeste(){const r=entAdd(parseNFeXML(entXmlTeste()),'teste');save();go
 
 /* ---- telas ---- */
 function verFoto(src){$('#modal').innerHTML=`<div class="ov" onclick="closeM()"><div class="md" style="padding:10px;text-align:center"><img src="${src}" alt="foto" style="max-width:100%;max-height:75vh;border-radius:8px"><div class="bar" style="margin:8px 0 0"><span class="sp"></span><button class="pr" onclick="closeM()">Fechar</button></div></div></div>`}
+/* ---------- Fotos no Storage do Supabase (bucket privado "fotos") ----------
+   Nos dados fica só a referência "sb:<usuário>/<ano-mês>/<id>.jpg". A imagem vai para o bucket.
+   Cópia guardada no aparelho (IndexedDB): abre sem internet e não baixa de novo (economiza tráfego).
+   Foto tirada sem internet entra numa fila e sobe quando a conexão voltar. */
+const BKT='fotos',FD={},FU={},FBUSY={};let FQRUN=false,FMIG=false;
+const FPH="data:image/svg+xml;utf8,"+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 90"><rect width="120" height="90" fill="#26323d"/><path d="M48 36h24l4 6h8v24H36V42h8z" fill="none" stroke="#7d8b97" stroke-width="3"/><circle cx="60" cy="53" r="7" fill="none" stroke="#7d8b97" stroke-width="3"/></svg>');
+const isRef=s=>typeof s=='string'&&s.startsWith('sb:'),refP=s=>s.slice(3);
+const d2b=d=>{const[h,b]=d.split(','),m=(h.match(/data:([^;]+)/)||[])[1]||'image/jpeg',u=atob(b),a=new Uint8Array(u.length);for(let i=0;i<u.length;i++)a[i]=u.charCodeAt(i);return new Blob([a],{type:m})};
+const b2d=b=>new Promise((ok,no)=>{const r=new FileReader();r.onload=()=>ok(r.result);r.onerror=no;r.readAsDataURL(b)});
+function fsrc(s){if(!isRef(s))return s||FPH;const p=refP(s);if(FU[p])return FU[p];if(FD[p])return FU[p]=URL.createObjectURL(d2b(FD[p]));return FPH}
+/* atributos para <img>: src já resolvido + data-sb para carregar depois */
+const fimg=s=>`src="${e(fsrc(s))}"${isRef(s)&&!FU[refP(s)]?` data-sb="${e(refP(s))}"`:''}`;
+async function fload(p){if(FD[p])return FD[p];if(FBUSY[p])return FBUSY[p];return FBUSY[p]=(async()=>{try{
+  let d=await IDB.get('f:'+p);
+  if(!d&&SB&&navigator.onLine!==false){const{data,error}=await SB.storage.from(BKT).download(p);if(!error&&data){d=await b2d(data);IDB.set('f:'+p,d)}}
+  if(d)FD[p]=d;return d||null}catch(x){return null}finally{delete FBUSY[p]}})()}
+/* troca as imagens da tela que ainda estão com o marcador */
+function fhyd(){document.querySelectorAll('img[data-sb]').forEach(async im=>{const p=im.dataset.sb;const d=await fload(p);if(d&&im.isConnected){im.src=fsrc('sb:'+p);im.removeAttribute('data-sb')}})}
+/* PDF: precisa das imagens em data URL antes de montar */
+const fdata=s=>isRef(s)?(FD[refP(s)]||null):s;
+async function fpre(o){const L=[...new Set((JSON.stringify(o||{}).match(/"sb:[^"]+"/g)||[]).map(x=>x.slice(4,-1)))];if(!L.length)return;
+ const t=setTimeout(()=>toast('Carregando fotos para o PDF...'),400);await Promise.all(L.map(fload));clearTimeout(t);
+ const f=L.filter(p=>!FD[p]).length;if(f)toast(f+' foto(s) não carregaram (sem internet?). O PDF sai sem elas.')}
+/* fila de envio */
+const fpath=()=>`${SES.user.id}/${today().slice(0,7)}/${uid()}${uid()}.jpg`;
+async function fqAdd(p){const q=(await IDB.get('upq'))||[];if(!q.includes(p)){q.push(p);await IDB.set('upq',q)}}
+async function fqRun(){if(FQRUN||!SB||!SES||PEND)return;FQRUN=true;try{let q=(await IDB.get('upq'))||[];
+ for(const p of [...q]){const d=FD[p]||await IDB.get('f:'+p);if(!d){q=q.filter(x=>x!=p);continue}
+  const{error}=await SB.storage.from(BKT).upload(p,d2b(d),{contentType:(d.match(/data:([^;]+)/)||[])[1]||'image/jpeg',upsert:true,cacheControl:'31536000'});
+  if(error&&!/exists|duplicate/i.test(error.message||''))break;q=q.filter(x=>x!=p);await IDB.set('upq',q)}
+ }catch(x){}finally{FQRUN=false}}
+addEventListener('online',()=>{fqRun();fmigra()});setInterval(()=>{fqRun()},60000);
+/* foto nova: comprime, guarda no aparelho, entra na fila e devolve a referência */
+function picRef(file,cb){pic(file,d=>{if(!SES)return cb(d);const p=fpath();FD[p]=d;IDB.set('f:'+p,d).then(()=>fqAdd(p)).then(fqRun);cb('sb:'+p)})}
+/* move as fotos antigas (dentro dos dados) para o bucket, uma vez */
+async function fmigra(){if(FMIG||!SB||!SES||PEND||navigator.onLine===false)return;const slots=[],map={};
+ const add=(get,set)=>{const v=get();if(typeof v=='string'&&v.startsWith('data:image'))slots.push([v,set])};
+ db.orders.forEach(o=>{(o.fotos||[]).forEach(f=>add(()=>f.src,r=>f.src=r));Object.values(o.ck||{}).forEach(c=>c&&add(()=>c.foto,r=>c.foto=r));((o.laudo||{}).fotos||[]).forEach(f=>add(()=>f.src,r=>f.src=r))});
+ db.quotes.forEach(q=>(q.fotos||[]).forEach(f=>add(()=>f.src,r=>f.src=r)));
+ if(!slots.length)return;FMIG=true;let ok=0;const uniq=[...new Set(slots.map(x=>x[0]))];toast(`Movendo ${uniq.length} foto(s) para o armazenamento seguro...`);
+ try{for(const d of uniq){const p=fpath(),{error}=await SB.storage.from(BKT).upload(p,d2b(d),{contentType:(d.match(/data:([^;]+)/)||[])[1]||'image/jpeg',upsert:true,cacheControl:'31536000'});
+   if(error)break;FD[p]=d;IDB.set('f:'+p,d);map[d]='sb:'+p;ok++}
+  slots.forEach(([d,set])=>{if(map[d])set(map[d])});if(ok){save();render();toast(ok==uniq.length?`Fotos movidas: ${ok}. O app agora salva mais rápido.`:`${ok} de ${uniq.length} fotos movidas. O resto vai na próxima vez.`)}}
+ catch(x){}finally{FMIG=false}}
+
 /* botões de foto: Câmera abre a câmera do celular na hora; Galeria escolhe fotos já tiradas */
 function fotoBtns(fn,o){o=o||{};const run=`toast('Processando foto...');${fn};this.value=''`,c=o.cls||'sm',ic=o.ico?1:0;
  return`<label class="btn ${c} pr fb" style="margin:0;color:var(--on)" title="Tirar foto com a câmera">${svgi('osfotos')}${ic?'':'<span>Câmera</span>'}<input type="file" accept="image/*" capture="environment" class="fi" onchange="${run}"></label><label class="btn ${c} fb" style="margin:0" title="Escolher da galeria">${svgi('galeria')}${ic?'':'<span>Galeria</span>'}<input type="file" accept="image/*" ${o.um?'':'multiple'} class="fi" onchange="${run}"></label>`}
@@ -1289,7 +1334,7 @@ const lOf=o=>{const L=o.laudo=o.laudo&&typeof o.laudo=='object'?o.laudo:{};L.fot
 const lOpt=(A,k)=>A.find(x=>x[0]==(k||''))||A[0];
 const lCods=s=>String(s||'').split(/[\s,;]+/).map(x=>x.trim().toUpperCase()).filter(Boolean);
 function lProg(o){const L=lOf(o),req=['rec','testes','diag','sol'],ok=req.filter(k=>String(L[k]||'').trim()).length+(L.cond?1:0)+((L.tec||o.mec)?1:0);return{ok,tot:req.length+2}}
-function lFotos(fs){const o=od(S.id),L=lOf(o);[...fs].forEach(f=>pic(f,d=>{L.fotos.push({id:uid(),src:d,obs:''});save();render()}))}
+function lFotos(fs){const o=od(S.id),L=lOf(o);[...fs].forEach(f=>picRef(f,d=>{L.fotos.push({id:uid(),src:d,obs:''});save();render()}))}
 function lFotoDel(i){const L=lOf(od(S.id));L.fotos.splice(i,1);save();render()}
 function lSet(k,v){const L=lOf(od(S.id));L[k]=v;save();osTabsRefresh();if(['cond','urg','cod'].includes(k))render()}
 function lDoCheck(){const o=od(S.id),L=lOf(o),achados=CK.map(n=>[n,o.ck[n]||{}]).filter(([,c])=>['Atenção','Defeito'].includes(c.s));
@@ -1311,13 +1356,13 @@ function Vlaudo(o){const L=lOf(o);if(!L.rec&&o.problema){L.rec=o.problema;save()
  ${sec(2,'Inspeção e testes',fld('testes','Testes realizados','',1)+`<div class="g2">${fld('equip','Equipamentos utilizados','Scanner, multímetro...')}${fld('cod','Códigos de falha (DTC)','separe por vírgula')}</div>${cods.length?`<div class="lcods">${cods.map(x=>`<span>${e(x)}</span>`).join('')}</div>`:''}`)}
  ${sec(3,'Diagnóstico',fld('diag','Defeito encontrado','',1)+fld('causa','Causa provável','',1))}
  ${sec(4,'Recomendação',fld('sol','Solução recomendada','serviços e peças necessários',1)+`<div class="g2"><label>Urgência<select onchange="lSet('urg',this.value)">${opts(LURG,L.urg)}</select></label><label>Condição do veículo<select onchange="lSet('cond',this.value)">${opts(LCOND,L.cond)}</select></label></div>`)}
- ${sec(5,'Evidências fotográficas',`${L.fotos.length?`<div class="ph lph">${L.fotos.map((f,i)=>`<figure><img src="${e(f.src)}" alt="Foto ${i+1} do laudo" onclick="verFoto(this.src)"><figcaption><b>Foto ${i+1}</b><input value="${e(f.obs)}" placeholder="Legenda (o que a foto mostra)" onchange="lOf(od(S.id)).fotos[${i}].obs=this.value;save()"><button class="sm" onclick="lFotoDel(${i})">Remover</button></figcaption></figure>`).join('')}</div>`:'<p class="muted" style="margin:0 0 8px">Fotografe o defeito encontrado: peça danificada, vazamento, leitura do scanner, medições.</p>'}
+ ${sec(5,'Evidências fotográficas',`${L.fotos.length?`<div class="ph lph">${L.fotos.map((f,i)=>`<figure><img ${fimg(f.src)} alt="Foto ${i+1} do laudo" onclick="verFoto(this.src)"><figcaption><b>Foto ${i+1}</b><input value="${e(f.obs)}" placeholder="Legenda (o que a foto mostra)" onchange="lOf(od(S.id)).fotos[${i}].obs=this.value;save()"><button class="sm" onclick="lFotoDel(${i})">Remover</button></figcaption></figure>`).join('')}</div>`:'<p class="muted" style="margin:0 0 8px">Fotografe o defeito encontrado: peça danificada, vazamento, leitura do scanner, medições.</p>'}
   ${nOS?`<label class="lchk"><input type="checkbox" ${inclui?'checked':''} onchange="lSet('osFotos',this.checked?1:0)"> Incluir no PDF também as ${nOS} foto(s) da seção Fotos da O.S.</label>`:''}`,`<div class="fbs">${fotoBtns('lFotos([...this.files])')}</div>`)}
  ${sec(6,'Responsável técnico',`<div class="g2">${fld('tec','Técnico responsável')}<label>Data da inspeção<input type="date" value="${e(L.data||'')}" onchange="lSet('data',this.value)"></label></div><p class="muted" style="font-size:13px;margin:4px 0 0">${LDECL}</p>`)}`}
 
 /* PDF */
 async function genLaudo(o){
- if(noLib())return;const L=lOf(o),cli=cl(o.cli),v=vh(o.veh),cd=lOpt(LCOND,L.cond),ur=lOpt(LURG,L.urg),tec=L.tec||o.mec||'';
+ if(noLib())return;await fpre(o);const L=lOf(o),cli=cl(o.cli),v=vh(o.veh),cd=lOpt(LCOND,L.cond),ur=lOpt(LURG,L.urg),tec=L.tec||o.mec||'';
  const F=[...L.fotos.map((f,i)=>({src:f.src,t:'Foto '+(i+1),obs:f.obs}))];if(L.osFotos!==0&&L.osFotos!=='0')(o.fotos||[]).forEach(f=>F.push({src:f.src,t:'Foto '+(F.length+1)+' · '+(f.t||''),obs:f.obs}));
  const Z=mkDoc('LAUDO TÉCNICO','O.S. '+o.num,['Inspeção: '+D(L.data||today()),tec&&'Técnico: '+tec,v.km&&'Km: '+v.km]),{d,W,M,CW}=Z;
  Z.parties(cli,v);
@@ -1540,7 +1585,7 @@ function navHtml(){const L=NAVX(),c=db.cfg||{},nm=c.nome||'Fio-Mar',
  <div class="nt">${L.filter(x=>!['out','inst'].includes(x[0])).map(([k,l])=>`<a class="${on(k)?'on':''}" onclick="go('${k}')">${svgi(k)}<span>${l}</span></a>`).join('')}</div></div>`}
 const V={entradas:Ventradas,entrada:Ventrada,notas:Vnotas,dash:Vdash,fin:Vfin,agenda:Vagenda,agsvc:Vagsvc,clients:Vclients,vehicles:Vvehicles,quotes:Vquotes,quote:Vquote,orders:Vorders,order:Vorder,recibo:Vrecibo,cfg:Vcfg,stock:Vstock,prod:Vprod,out:()=>{doOut();return ''}};
 const NAV=[['dash','Painel'],['agenda','Agenda'],['clients','Clientes'],['vehicles','Veículos'],['quotes','Orçamentos'],['orders','O.S.'],['notas','Notas'],['entradas','Entradas'],['stock','Estoque'],['fin','Finanças'],['cfg','Oficina'],['out','Sair']];
-function render(keep){RTICK++;if(!SES)return authView();if(PEND)return pendView();const m=$('#main');$('#nav').style.display='';const a=document.activeElement,id=a&&a.placeholder,pos=a&&a.selectionStart;
+function render(keep){RTICK++;setTimeout(fhyd,0);if(!SES)return authView();if(PEND)return pendView();const m=$('#main');$('#nav').style.display='';const a=document.activeElement,id=a&&a.placeholder,pos=a&&a.selectionStart;
  $('#nav').innerHTML=navHtml();{const ac=$('#nav a.on'),nt=$('#nav .nt');if(ac&&nt)nt.scrollLeft=ac.offsetLeft-(nt.clientWidth-ac.offsetWidth)/2}
  m.innerHTML=V[S.v]();document.querySelectorAll('nav a,.tabs a,.row,.tile,.lc:not(.nc)').forEach(x=>x.tabIndex=0);
  if(keep&&id){const n=[...m.querySelectorAll('input')].find(x=>x.placeholder==id);if(n){n.focus();n.setSelectionRange(pos,pos)}}}
@@ -1561,7 +1606,7 @@ addEventListener('appinstalled',()=>{INST=null;toast('App instalado');if(typeof 
 if('serviceWorker' in navigator&&/^https?:/.test(location.protocol)){const SWW=navigator.serviceWorker,tinha=!!SWW.controller;let RL=false;
  SWW.addEventListener('controllerchange',()=>{if(!tinha||RL)return;RL=true;try{if(DIRTY){clearTimeout(TS);push()}}catch(x){}try{toast('Atualizando para a nova versão...')}catch(x){}setTimeout(()=>location.reload(),600)});
  addEventListener('load',()=>SWW.register('sw.js',{updateViaCache:'none'}).then(r=>{const up=()=>r.update().catch(()=>{});setInterval(up,30*60e3);document.addEventListener('visibilitychange',()=>{if(document.visibilityState=='visible')up()})}).catch(()=>{}))}
-const APP_VER='1.8.5';
+const APP_VER='1.9.0';
 (function(){const f=document.getElementById('ver');if(f)f.textContent='Fio-Mar Gestor · versão '+APP_VER;document.title=document.title})();
 boot();
 </script>
