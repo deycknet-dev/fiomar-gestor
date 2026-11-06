@@ -210,20 +210,33 @@ let LASTV=null,CONF=false,DIRTY=false;
 async function pull(){const{data,error}=await SB.from('wab_data').select('data,updated_at').eq('id',SES.user.id).maybeSingle();
  if(error){toast('Erro ao carregar os dados: '+error.message);return}
  db=data&&data.data&&data.data.clients?cleanDb(data.data):load();LASTV=data?data.updated_at:null;CONF=false;DIRTY=false;if(!data)await push();fixEstoque()}
-async function push(){if(!SB||!SES||PEND||CONF)return;DIRTY=false;const row={data:db,updated_at:new Date().toISOString()};
- const q=LASTV?SB.from('wab_data').update(row).eq('id',SES.user.id).eq('updated_at',LASTV):SB.from('wab_data').upsert({id:SES.user.id,...row});
- const{data,error}=await q.select('updated_at');
- if(error){DIRTY=true;return toast('Falha ao salvar na nuvem: '+error.message)}
+let PUSHING=null;
+async function push(){if(PUSHING){await PUSHING.catch(()=>{});if(!DIRTY)return}PUSHING=push0();try{return await PUSHING}finally{PUSHING=null}}
+async function push0(){if(!SB||!SES||PEND||CONF)return;clearTimeout(TS);DIRTY=false;const row={data:db,updated_at:new Date().toISOString()};
+ let data,error;try{const q=LASTV?SB.from('wab_data').update(row).eq('id',SES.user.id).eq('updated_at',LASTV):SB.from('wab_data').upsert({id:SES.user.id,...row});({data,error}=await q.select('updated_at'))}catch(x){error={message:x&&x.message||'sem conexão'}}
+ if(error){DIRTY=true;guardaLocal();if(!RTRY)toast(/fetch|network|conex|offline/i.test(error.message)?'Sem internet: as alterações ficaram guardadas neste aparelho e serão salvas quando a conexão voltar':'Falha ao salvar na nuvem: '+error.message);reagenda();return}
  if(LASTV&&!(data&&data.length)){const c=await SB.from('wab_data').select('updated_at').eq('id',SES.user.id).maybeSingle();
-  if(c.data&&c.data.updated_at!=LASTV){DIRTY=true;return conflito()}DIRTY=true;return toast('Não foi possível salvar. Verifique sua conexão e permissões.')}
- LASTV=data&&data[0]?data[0].updated_at:row.updated_at}
+  if(c.data&&c.data.updated_at!=LASTV){DIRTY=true;return conflito()}DIRTY=true;reagenda();return toast('Não foi possível salvar. Verifique sua conexão e permissões.')}
+ LASTV=data&&data[0]?data[0].updated_at:row.updated_at;RTRY=0;clearTimeout(RTT);if(!DIRTY){clearTimeout(TL);IDB.del(pk())}else{guardaLocal();clearTimeout(TS);TS=setTimeout(push,300)}}
 function conflito(){CONF=true;$('#modal').innerHTML=`<div class="ov"><div class="md"><h2 style="margin-top:0">Dados alterados em outro aparelho</h2><p>Esta conta foi atualizada em outro aparelho ou aba depois que você abriu o app. Para não apagar o trabalho feito lá, o salvamento foi pausado.</p><p class="muted">Recomendado: recarregar os dados mais recentes. O que você alterou aqui desde a última sincronização será descartado.</p><div class="bar"><button type="button" onclick="resolveConf(0)">Manter os dados deste aparelho</button><span class="sp"></span><button type="button" class="pr" onclick="resolveConf(1)">Recarregar dados novos</button></div></div></div>`}
-async function resolveConf(reload){closeM();if(reload){await pull();render();toast('Dados atualizados')}else{const{data}=await SB.from('wab_data').select('updated_at').eq('id',SES.user.id).maybeSingle();LASTV=data?data.updated_at:null;CONF=false;await push();toast('Seus dados foram mantidos')}}
-function save(){DIRTY=true;clearTimeout(TS);TS=setTimeout(push,700)}
+async function resolveConf(reload){closeM();if(reload){IDB.del(pk());await pull();render();toast('Dados atualizados')}else{const{data}=await SB.from('wab_data').select('updated_at').eq('id',SES.user.id).maybeSingle();LASTV=data?data.updated_at:null;CONF=false;await push();toast('Seus dados foram mantidos')}}
+const IDB=(()=>{let P;const op=()=>P=P||new Promise((ok,no)=>{try{const r=indexedDB.open('fiomar',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)}catch(x){no(x)}});
+ const tx=(m,f)=>op().then(d=>new Promise((ok,no)=>{const t=d.transaction('kv',m),q=f(t.objectStore('kv'));t.oncomplete=()=>ok(q&&q.result);t.onerror=()=>no(t.error)}));
+ return{get:k=>tx('readonly',x=>x.get(k)).catch(()=>null),set:(k,v)=>tx('readwrite',x=>x.put(v,k)).catch(()=>{}),del:k=>tx('readwrite',x=>x.delete(k)).catch(()=>{})}})();
+const pk=()=>'pend_'+(SES&&SES.user?SES.user.id:'');let TL=null,RTRY=0,RTT=null;
+function guardaLocal(){clearTimeout(TL);TL=setTimeout(()=>{if(SES&&DIRTY)IDB.set(pk(),{data:JSON.parse(JSON.stringify(db)),base:LASTV,ts:Date.now()})},400)}
+function reagenda(){clearTimeout(RTT);const ms=Math.min(60000,4000*2**RTRY);RTRY++;RTT=setTimeout(()=>{if(DIRTY&&!CONF)push()},ms)}
+addEventListener('online',()=>{if(DIRTY&&!CONF){RTRY=0;push()}});
+async function recPend(){if(!SES||PEND)return;const p=await IDB.get(pk());if(!p||!p.data)return;
+ if(JSON.stringify(p.data)===JSON.stringify(db)){IDB.del(pk());return}
+ if(p.base===LASTV){db=cleanDb(p.data);save();render();toast('Alterações feitas sem internet foram recuperadas e salvas');return}
+ $('#modal').innerHTML=`<div class="ov"><div class="md"><h2 style="margin-top:0">Alterações não salvas neste aparelho</h2><p>Este aparelho tem alterações feitas sem internet em ${new Date(p.ts).toLocaleString('pt-BR')}, mas a conta também foi alterada em outro lugar depois disso.</p><p class="muted">Escolha qual versão manter. A outra será descartada.</p><div class="bar"><button type="button" onclick="IDB.del(pk());closeM()">Manter a da nuvem</button><span class="sp"></span><button type="button" class="pr" onclick="usaPend()">Usar a deste aparelho</button></div></div></div>`}
+async function usaPend(){const p=await IDB.get(pk());closeM();if(!p)return;db=cleanDb(p.data);DIRTY=true;await push();render();toast('Alterações deste aparelho salvas')}
+function save(){DIRTY=true;clearTimeout(TS);TS=setTimeout(push,700);guardaLocal()}
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState=='hidden'&&DIRTY){clearTimeout(TS);push()}});
 addEventListener('pagehide',()=>{if(DIRTY){clearTimeout(TS);push()}});
 async function boot(){const c=cfg0();
- if(c.url&&c.key&&window.supabase){SB=window.supabase.createClient(c.url,c.key);const{data}=await SB.auth.getSession();if(data.session){SES=data.session;await gate();if(!PEND)await pull()}}
+ if(c.url&&c.key&&window.supabase){SB=window.supabase.createClient(c.url,c.key);const{data}=await SB.auth.getSession();if(data.session){SES=data.session;await gate();if(!PEND){await pull();await recPend()}}}
  render();setTimeout(entAutoSync,3000)}
 function setMode(m){AM=m;authView()}
 function authView(){const c=cfg0();$('#nav').style.display='none';
@@ -271,7 +284,7 @@ function toast(t){const o=$('#toast');o.textContent=t;o.style.display='block';se
 const cl=id=>db.clients.find(x=>x.id==id)||{};
 const vh=id=>db.vehicles.find(x=>x.id==id)||{};
 const od=id=>db.orders.find(x=>x.id==id);
-const sum=(it,d)=>it.reduce((a,i)=>a+(+i.q||0)*(+i.v||0),0)-(+d||0);
+const sum=(it,d)=>Math.max(0,it.reduce((a,i)=>a+(+i.q||0)*(+i.v||0),0)-(+d||0));
 const oTot=o=>sum(o.items,o.desc),paid=o=>o.pags.reduce((a,p)=>a+(+p.valor||0),0);
 const vlabel=v=>(v&&(v.modelo||v.placa))?`${v.modelo||'?'} ${v.placa||''}`.trim():'Sem veículo';
 function go(v,id,tab,f){S.v=v;S.id=id||null;S.tab=tab||'resumo';S.f=f||{};render();scrollTo(0,0)}
@@ -301,12 +314,24 @@ const BUSCA=(k,l,o,r,vals,x)=>{x=x||{};const nv=x.novo?(t=>x.novo(t,modalVals())
  return`<div class="lb">${nv?`<div class="cbhd"><span>${l}</span><button type="button" class="sm" onclick="CBR['m-${k}'].novo('')">+ ${e(x.btn||'Novo')}</button></div>`:l}${combo('m-'+k,{items:toItems(o),value:vals[k]!=null?String(vals[k]):'',name:k,req:r,ph:'Digite para buscar...',novo:nv,novoTxt:x.novoTxt,pick:x.pick})}</div>`};
 /* modal genérico: campos [chave,rótulo,tipo,opções,obrigatório] */
 let MD=null;
+/* números digitados no padrão brasileiro: 35,50 · 1.250,00 · 35.5 */
+function nBR(v){if(typeof v=='number')return v;const raw=String(v==null?'':v).trim();if(!raw||/[a-zA-Z]/.test(raw.replace(/R\$/gi,''))||!/\d/.test(raw))return NaN;
+ let x=raw.replace(/[^\d,.\-]/g,'');const neg=/^-/.test(x);x=x.replace(/-/g,'');const c=x.lastIndexOf(','),d=x.lastIndexOf('.');
+ if(c>=0&&d>=0)x=c>d?x.replace(/\./g,'').replace(',','.'):x.replace(/,/g,'');
+ else if(c>=0)x=(x.match(/,/g).length>1)?x.replace(/,/g,''):x.replace(',','.');
+ else if(d>=0&&(x.match(/\./g).length>1||/^[1-9]\d{0,2}\.\d{3}$/.test(x)))x=x.replace(/\./g,'');
+ if(!/^\d*\.?\d+$|^\d+\.$/.test(x))return NaN;const n=+x;return neg?-n:n}
+const nShow=v=>v==null||v===''?'':String(v).replace(/^(-?\d+)\.(\d+)$/,'$1,$2');
+let SUBT=0;
 function confirmDel(b,fn){if(b.dataset.s)return fn();b.dataset.s=1;const t=b.textContent;b.textContent='Toque de novo para confirmar';setTimeout(()=>{delete b.dataset.s;b.textContent=t},3500)}
 function modal(t,fields,vals,cb,extra,del){MD=del;
- const inp=([k,l,ty,o,r,x])=>ty=='h'?`<h3 style="margin:16px 0 8px;padding-top:10px;border-top:1px solid var(--ln)">${l}</h3>`:ty=='busca'?BUSCA(k,l,o,r,vals,x):`<label>${l}`+(ty=='select'?`<select name="${k}">${o.map(x=>{const[v,n]=Array.isArray(x)?x:[x,x];return`<option value="${e(v)}" ${vals[k]==v?'selected':''}>${e(n)}</option>`}).join('')}</select>`:ty=='area'?`<textarea name="${k}">${e(vals[k])}</textarea>`:`<input name="${k}" type="${ty||'text'}" ${ty=='number'?'step="any"':''} value="${e(vals[k])}" ${r?'required':''}>`)+`</label>`;
+ const inp=([k,l,ty,o,r,x])=>ty=='h'?`<h3 style="margin:16px 0 8px;padding-top:10px;border-top:1px solid var(--ln)">${l}</h3>`:ty=='busca'?BUSCA(k,l,o,r,vals,x):`<label>${l}`+(ty=='select'?`<select name="${k}">${o.map(x=>{const[v,n]=Array.isArray(x)?x:[x,x];return`<option value="${e(v)}" ${vals[k]==v?'selected':''}>${e(n)}</option>`}).join('')}</select>`:ty=='area'?`<textarea name="${k}">${e(vals[k])}</textarea>`:(ty=='number'?`<input name="${k}" type="text" inputmode="decimal" autocomplete="off" data-num value="${e(nShow(vals[k]))}" ${r?'required':''}>`:`<input name="${k}" type="${ty||'text'}" value="${e(vals[k])}" ${r?'required':''}>`))+`</label>`;
  $('#modal').innerHTML=`<div class="ov"><form class="md"><h2 style="margin-top:0">${e(t)}</h2>${extra||''}${fields.map(inp).join('')}<div class="bar" style="margin:6px 0 0">${del?'<button type="button" class="dg" onclick="confirmDel(this,()=>{closeM();MD()})">Excluir</button>':''}<span class="sp"></span><button type="button" onclick="closeM()">Cancelar</button><button class="pr">Salvar</button></div></form></div>`;
  document.querySelectorAll('#modal .cb').forEach(cbValid);
- $('#modal form').onsubmit=ev=>{ev.preventDefault();const o=Object.fromEntries(new FormData(ev.target));closeM(1);cb(o);voltaPai()};
+ $('#modal form').onsubmit=ev=>{ev.preventDefault();if(ev.target.dataset.sent)return;
+  const bad=[...ev.target.querySelectorAll('[data-num]')].filter(f=>f.value.trim()&&!isFinite(nBR(f.value)));
+  if(bad.length){bad[0].focus();bad[0].style.borderColor='#B4472E';return toast('Número inválido. Use só números e vírgula. Ex.: 35,50')}
+  ev.target.dataset.sent=1;const o=Object.fromEntries(new FormData(ev.target));ev.target.querySelectorAll('[data-num]').forEach(f=>{if(o[f.name]!=null&&String(o[f.name]).trim()!=='')o[f.name]=String(nBR(o[f.name]))});closeM(1);cb(o);voltaPai()};
 }
 const RETS=[],voltaPai=()=>{const r=RETS.pop();if(r)r()},closeM=skip=>{$('#modal').innerHTML='';if(skip!==1)voltaPai()};
 const modalVals=()=>Object.fromEntries(new FormData($('#modal form')));
@@ -440,7 +465,9 @@ function editQuote(id){const q=id?db.quotes.find(x=>x.id==id):{id:uid(),n:db.qse
 const qNovoCli=t=>editClient(null,n=>{S.q.cli=n.id;S.q.veh=''},{nome:t||''});
 const qNovoVeh=()=>editVeh(null,v=>{S.q.veh=v.id},{cli:S.q.cli});
 function qBack(){const q=S.q;if(q.novo&&!q.items.length)return go('quotes');if(!q.cli)return toast('Escolha ou cadastre o cliente antes de sair');saveQuote(1);go('quotes')}
-function qs(k,v){S.q[k]=v;if(k=='cli'){S.q.veh=db.vehicles.find(x=>x.cli==v)?.id||'';render()}if(k=='desc')document.querySelectorAll('#qt,.qtot').forEach(x=>x.textContent=R(sum(S.q.items,S.q.desc)))}
+function qs(k,v){if(k=='desc'){const sub=S.q.items.reduce((a,i)=>a+(+i.q||0)*(+i.v||0),0);let n=String(v).trim()===''?0:nBR(v);
+ if(!isFinite(n)||n<0){n=0;toast('Desconto inválido')}else if(n>sub){n=sub;toast('O desconto não pode ser maior que o total dos itens ('+R(sub)+')')}v=n;const f=$('.qdesc');if(f)f.value=nShow(n||'')}
+ S.q[k]=v;if(k=='cli'){S.q.veh=db.vehicles.find(x=>x.cli==v)?.id||'';render()}if(k=='desc')document.querySelectorAll('#qt,.qtot').forEach(x=>x.textContent=R(sum(S.q.items,S.q.desc)))}
 function editItem(w,n,os){const i=w.items[n];if(!i)return;const lk=!!i.pid;
  const F=[...(lk?[]:[['t','Tipo','select',['Serviço','Peça','Mão de obra']]]),['d','Descrição','text',0,1],['det','Detalhes (opcional)'],['q','Quantidade','number',0,1],['v','Valor unitário (R$)','number',0,1],['custo','Custo unitário (R$, opcional - usado no lucro)','number'],['ncm','NCM da peça (opcional, 8 dígitos)'],['ctrib','Cód. tributação nacional do serviço (opcional)']];
  modal('Editar item',F,{...i,custo:i.custo!=null?i.custo:''},o=>{
@@ -451,7 +478,7 @@ function editItem(w,n,os){const i=w.items[n];if(!i)return;const lk=!!i.pid;
    if(d<0)MV().push({id:uid(),pid:p.id,tipo:'E',q:-d,data:today(),obs:'Ajuste O.S. '+w.num})}
   const it={...i,...o,q,v};if(o.custo===''||o.custo==null)delete it.custo;else it.custo=+o.custo;if(lk)it.t=i.t;
   w.items[n]=it;save();render();toast('Item atualizado')},0,()=>{if(os)rmOS(n);else{w.items.splice(n,1);save();render()}})}
-function addItem(w){modal('Adicionar item',[['t','Tipo','select',['Serviço','Peça','Mão de obra']],['d','Descrição','text',0,1],['det','Detalhes (opcional)'],['q','Quantidade','number',0,1],['v','Valor unitário (R$)','number',0,1],['custo','Custo unitário (R$, opcional - usado no lucro)','number'],['ncm','NCM da peça (opcional, 8 dígitos)'],['ctrib','Cód. tributação nacional do serviço (opcional)']],{q:1,t:'Serviço'},o=>{const it={...o,q:+o.q,v:+o.v};if(o.custo===''||o.custo==null)delete it.custo;else it.custo=+o.custo;w.items.push(it);save();render()})}
+function addItem(w){modal('Adicionar item',[['t','Tipo','select',['Serviço','Peça','Mão de obra']],['d','Descrição','text',0,1],['det','Detalhes (opcional)'],['q','Quantidade','number',0,1],['v','Valor unitário (R$)','number',0,1],['custo','Custo unitário (R$, opcional - usado no lucro)','number'],['ncm','NCM da peça (opcional, 8 dígitos)'],['ctrib','Cód. tributação nacional do serviço (opcional)']],{q:1,t:'Serviço'},o=>{if(!(+o.q>0))return toast('Quantidade inválida');if(!(+o.v>=0))return toast('Valor inválido');if(o.custo!==''&&o.custo!=null&&!(+o.custo>=0))return toast('Custo inválido');const it={...o,q:+o.q,v:+o.v};if(o.custo===''||o.custo==null)delete it.custo;else it.custo=+o.custo;w.items.push(it);save();render()})}
 function saveQuote(quiet){const q=S.q;if(!q.cli){if(!quiet)toast('Escolha ou cadastre o cliente');return}if(!q.veh)q.veh='';
  if(q.novo){delete q.novo;db.qseq++;db.quotes.push(q)}else db.quotes[db.quotes.findIndex(x=>x.id==q.id)]=q;save();if(!quiet)toast('Orçamento salvo')}
 function approve(){saveQuote(1);modal('Aceite do cliente',[['nome','Nome de quem aprova (assinatura)','text',0,1]],{},o=>{Object.assign(S.q,{status:'Aprovado',aprov:{nome:o.nome,data:today()}});saveQuote();render()},`<p class="muted">${TERMOS}</p>`)}
@@ -485,12 +512,12 @@ async function waDocShare(){const w=WD;if(!w)return;const f=new File([w.blob],w.
 async function waQuote(){const q=S.q;if(!q.cli)return toast('Escolha ou cadastre o cliente');saveQuote(1);const c=cl(q.cli),v=q.veh?vlabel(vh(q.veh)):'';
  const ok=await waDoc(genPDF,q,c.tel,`Olá, ${c.nome}! Tudo bem?\n\nEsse documento é o orçamento do serviço${v?' do seu '+v:''}, Nº ${q.n}.\nValor total: ${R(sum(q.items,q.desc))}${q.prazo?'\nPrazo: '+q.prazo:''}\n\nFicando de acordo, é só me avisar para darmos andamento. Qualquer dúvida, estou à disposição.\n\n${empNome()}`);
  if(ok&&q.status=='Rascunho'){q.status='Aguardando';saveQuote(1);render()}}
-function Vquote(){const q=S.q,vs=db.vehicles.filter(v=>v.cli==q.cli),ro=q.status=='Aprovado';
- return head({back:'qBack()',kick:'Orçamento',title:'Nº '+e(q.n),c:SC[q.status],right:pill(q.status),sub:hsub(e(cl(q.cli).nome||'Escolha o cliente'),`${e(q.veh?vlabel(vh(q.veh)):'Sem veículo')}${q.prazo?' · prazo '+e(q.prazo):''}`,'Total',`<span class="qtot">${R(sum(q.items,q.desc))}</span>`),acts:`<button class="wa sm" onclick="waQuote()">WhatsApp</button><button class="sm" onclick="genPDF(S.q)">PDF</button>${q.os?`<span class="sp"></span><button class="sm pr" onclick="go('order','${q.os}')">Abrir O.S.</button>`:''}`})+`
+function Vquote(){const q=S.q,vs=db.vehicles.filter(v=>v.cli==q.cli),ro=q.status=='Aprovado',qo=q.os&&od(q.os);
+ return (qo?`<div class="fbar" style="border-color:#C98200">${svgi('alert')}<span>Este orçamento já virou a <b>O.S. ${e(qo.num)}</b>. Alterações aqui não mudam a O.S.</span><button class="sm" onclick="go('order','${qo.id}')">Abrir O.S.</button></div>`:'')+head({back:'qBack()',kick:'Orçamento',title:'Nº '+e(q.n),c:SC[q.status],right:pill(q.status),sub:hsub(e(cl(q.cli).nome||'Escolha o cliente'),`${e(q.veh?vlabel(vh(q.veh)):'Sem veículo')}${q.prazo?' · prazo '+e(q.prazo):''}`,'Total',`<span class="qtot">${R(sum(q.items,q.desc))}</span>`),acts:`<button class="wa sm" onclick="waQuote()">WhatsApp</button><button class="sm" onclick="genPDF(S.q)">PDF</button>${q.os?`<span class="sp"></span><button class="sm pr" onclick="go('order','${q.os}')">Abrir O.S.</button>`:''}`})+`
  <div class="card"><div class="g2"><div class="lb"><div class="cbhd"><span>Cliente</span><button type="button" class="sm" onclick="qNovoCli()">+ Novo cliente</button></div>${combo('q-cli',{items:toItems(cliArr()),value:q.cli,ph:'Digite o nome do cliente...',pick:id=>qs('cli',id),novo:t=>qNovoCli(t),novoTxt:'Cadastrar novo cliente'})}</div>
  <div class="lb"><div class="cbhd"><span>Veículo</span><button type="button" class="sm" onclick="qNovoVeh()" ${q.cli?'':'disabled'}>+ Novo veículo</button></div><select onchange="qs('veh',this.value)" ${q.cli?'':'disabled'}>${vs.length?`<option value="" ${q.veh?'':'selected'}>Sem veículo</option>`+vs.map(v=>`<option value="${v.id}" ${v.id==q.veh?'selected':''}>${e(vlabel(v))}</option>`).join(''):`<option value="">${q.cli?'Sem veículo (opcional)':'Escolha o cliente primeiro'}</option>`}</select></div>
  <label>Prazo<input value="${e(q.prazo)}" placeholder="Ex.: 3 dias úteis" onchange="qs('prazo',this.value)"></label>
- <label>Desconto (R$)<input type="number" step="any" value="${q.desc}" onchange="qs('desc',this.value)"></label></div>
+ <label>Desconto (R$)<input type="text" inputmode="decimal" autocomplete="off" class="qdesc" value="${e(nShow(q.desc||''))}" onchange="qs('desc',this.value)"></label></div>
  <label>Observações / problema relatado<textarea onchange="qs('obs',this.value)">${e(q.obs)}</textarea></label></div>
  <div class="card"><table><tr><th>Item</th><th class="n">Qtd</th><th class="n">Total</th><th></th></tr>${q.items.map((i,n)=>`<tr style="cursor:pointer" onclick="editItem(S.q,${n},0)"><td>${e(i.d)}<br><small class="muted">${e(i.t)} — ${R(i.v)}</small></td><td class="n">${i.q}</td><td class="n">${R(i.q*i.v)}</td><td style="white-space:nowrap"><button class="sm" aria-label="Editar item" onclick="event.stopPropagation();editItem(S.q,${n},0)">✎</button> <button class="sm" aria-label="Remover item" onclick="event.stopPropagation();S.q.items.splice(${n},1);render()">×</button></td></tr>`).join('')||'<tr><td colspan="4" class="muted">Adicione serviços, peças e mão de obra.</td></tr>'}</table>
  <div class="bar" style="margin-top:10px"><button onclick="addItem(S.q)">Adicionar item</button><button onclick="addStock(S.q,0)">Peça do estoque</button><span class="sp"></span><span class="muted">Total</span><span class="tot" id="qt">${R(sum(q.items,q.desc))}</span></div></div>
@@ -522,8 +549,9 @@ function Vorder(){const o=od(S.id);if(!o)return Vorders();const T=[['resumo','Re
  if(S.tab=='fotos')b=`<div class="card"><div class="bar"><select id="ft" style="width:auto;margin:0">${FT.map(x=>`<option>${x}</option>`).join('')}</select><span class="sp"></span><div class="fbs">${fotoBtns('addFotos([...this.files])',{cls:''})}</div></div></div>
  <div class="ph">${o.fotos.map((f,i)=>`<figure><img src="${e(f.src)}" alt="${e(f.t)}"><figcaption><b>${e(f.t)}</b><br><input value="${e(f.obs)}" placeholder="Observação" onchange="od(S.id).fotos[${i}].obs=this.value;save()"><button class="sm" style="margin-top:4px" onclick="od(S.id).fotos.splice(${i},1);save();render()">Remover</button></figcaption></figure>`).join('')}</div>${o.fotos.length?'':'<p class="muted">As fotos ficam vinculadas a esta O.S. como prova do que foi encontrado e executado.</p>'}`;
  if(S.tab=='nf')b=Vnf(o);
+ if(['resumo','nf','pag'].includes(S.tab))b=nfAviso(o)+b;
  if(S.tab=='pag'){const rest=oTot(o)-paid(o);b=`<div class="card"><table><tr><td>Total</td><td class="n">${R(oTot(o))}</td></tr><tr><td>Valor pago</td><td class="n">${R(paid(o))}</td></tr><tr><td><b>Valor restante</b></td><td class="n"><b>${R(rest)}</b></td></tr></table>
- <div class="bar" style="margin-top:10px"><button class="pr" onclick="addPag()">Registrar pagamento</button>${o.pags.length?`<button onclick="go('recibo','${o.id}')">Gerar recibo</button>`:''}</div></div>`+o.pags.map((p,i)=>`<div class="row" style="cursor:default"><div>${e(p.forma)}${p.forma=='Parcelado'?' em '+p.parc+'x':''}<small>${D(p.data)}</small></div><div class="r"><b>${R(p.valor)}</b><button class="sm" onclick="od(S.id).pags.splice(${i},1);save();render()">×</button></div></div>`).join('')}
+ <div class="bar" style="margin-top:10px"><button class="pr" onclick="addPag()">Registrar pagamento</button>${o.pags.length?`<button onclick="go('recibo','${o.id}')">Gerar recibo</button>`:''}</div></div>`+o.pags.map((p,i)=>`<div class="row" style="cursor:default"><div>${e(p.forma)}${p.forma=='Parcelado'?' em '+p.parc+'x':''}<small>${D(p.data)}</small></div><div class="r"><b>${R(p.valor)}</b><button class="sm" aria-label="Excluir pagamento" onclick="confirmDel(this,()=>{od(S.id).pags.splice(${i},1);save();render()})">×</button></div></div>`).join('')}
  const ti=osTabInfo(o),c=cl(o.cli);
  return`<div class="osh" style="--c:${SC[o.status]||'#777'}"><div class="osh1"><button class="ib" aria-label="Voltar para as O.S." onclick="go('orders')">${svgi('osback')}</button><div class="osh-t"><small>Ordem de serviço</small><h1>Nº ${e(o.num)}</h1></div><select class="ossel" aria-label="Situação da O.S." onchange="setSt(this.value)">${ST.map(s=>`<option ${o.status==s?'selected':''}>${s}</option>`).join('')}</select></div>
  <div class="osh2"><div><b>${e(vlabel(vh(o.veh)))}</b><small>${e(c.nome||'Sem cliente')}${o.aberta?' · entrada '+D(o.aberta):''}</small></div><div class="osv"><small>Total</small><b>${R(oTot(o))}</b></div></div>
@@ -625,7 +653,7 @@ const isLow=p=>qty(p.id)<=(+p.min||0);
 function editProd(id){const p=id?prod(id):{};
  const F=[['cod','Código / referência'],['nome','Nome da peça','text',0,1],['cat','Categoria (ex.: Injeção, Freios)'],['un','Unidade','select',['un','par','jogo','kg','L','m']],['custo','Custo (R$)','number'],['preco','Preço de venda (R$)','number'],['min','Estoque mínimo (alerta)','number'],['h','Dados fiscais (NF-e)'],['ncm','NCM (8 dígitos)'],['cest','CEST (se houver)'],['origem','Origem','select',[['','Padrão da oficina'],['0','0 - Nacional'],['1','1 - Estrangeira (importação direta)'],['2','2 - Estrangeira (mercado interno)']]],['csosn','CSOSN/CST (vazio = padrão)'],['cfop','CFOP (vazio = padrão)']];
  if(!id)F.push(['ini','Estoque inicial','number']);
- modal(id?'Editar peça':'Nova peça',F,id?p:{un:'un',min:0},o=>{const ini=+o.ini||0;delete o.ini;o.custo=+o.custo||0;o.preco=+o.preco||0;o.min=+o.min||0;if(id)Object.assign(p,o);else{const n={id:uid(),...o};PR().push(n);if(ini>0)MV().push({id:uid(),pid:n.id,tipo:'E',q:ini,data:today(),obs:'Estoque inicial'})}save();render()},0,id&&(()=>{db.prods=PR().filter(x=>x.id!=id);db.movs=MV().filter(m=>m.pid!=id);save();go('stock');toast('Peça excluída')}))}
+ modal(id?'Editar peça':'Nova peça',F,id?p:{un:'un',min:0},o=>{const ini=+o.ini||0;delete o.ini;o.custo=+o.custo||0;o.preco=+o.preco||0;o.min=+o.min||0;if(id)Object.assign(p,o);else{const n={id:uid(),...o};PR().push(n);if(ini>0)MV().push({id:uid(),pid:n.id,tipo:'E',q:ini,data:today(),obs:'Estoque inicial'})}save();render()},0,id&&(()=>{const uso=db.orders.filter(o=>o.items.some(i=>i.pid==id)).map(o=>o.num),uq=db.quotes.filter(q=>q.items.some(i=>i.pid==id)).length;if(uso.length||uq)return toast(`Esta peça está em ${uso.length?'O.S. '+uso.slice(0,3).join(', ')+(uso.length>3?'...':''):''}${uso.length&&uq?' e em ':''}${uq?uq+' orçamento(s)':''}. Não é possível excluir.`);db.prods=PR().filter(x=>x.id!=id);db.movs=MV().filter(m=>m.pid!=id);save();go('stock');toast('Peça excluída')}))}
 function mov(id,tipo){const p=prod(id),en=tipo=='E';
  modal((en?'Entrada':'Saída')+' de estoque: '+p.nome,[['q','Quantidade','number',0,1],['data','Data','date',0,1],...(en?[['custo','Custo unitário (R$, opcional)','number']]:[]),['obs',en?'Fornecedor / nota fiscal':'Motivo / O.S.']],{data:today()},o=>{const n=+o.q;if(!(n>0))return toast('Quantidade inválida');if(!en&&n>qty(id))return toast('Estoque insuficiente: restam '+qty(id));MV().push({id:uid(),pid:id,tipo,q:n,data:o.data,obs:o.obs||''});if(en&&+o.custo>0)p.custo=+o.custo;save();render();toast(en?'Entrada registrada':'Saída registrada')})}
 function addStock(w,os){if(!PR().length)return toast('Cadastre peças na aba Estoque primeiro');
@@ -826,7 +854,7 @@ function baixaOS(o){let n=0;const falta=[];(o.items||[]).forEach(i=>{if(i.t!='Pe
  MV().push({id:uid(),pid:p.id,tipo:'S',q,data:today(),obs:'O.S. '+o.num});i.baixa=true;n++});return{n,falta}}
 const avisoBaixa=r=>{if(r&&r.n)toast(r.falta.length?'Estoque baixado, mas faltou: '+r.falta.join(', '):'Estoque atualizado: '+r.n+' peça(s) baixada(s)')};
 function fixEstoque(){let n=0;(db.orders||[]).forEach(o=>{n+=baixaOS(o).n});if(n){save();toast('Estoque corrigido: '+n+' peça(s) de O.S. anteriores foram baixadas')}}
-function setSt(v){const o=od(S.id);o.status=v;let r=null;if(['Concluída','Entregue'].includes(v)){if(!o.conc)o.conc=today();r=baixaOS(o)}else delete o.conc;save();render();avisoBaixa(r)}
+function setSt(v){const o=od(S.id);o.status=v;let r=null;if(['Concluída','Entregue'].includes(v)){if(!o.conc)o.conc=today();r=baixaOS(o)}else delete o.conc;save();render();avisoBaixa(r);const rs=oTot(o)-paid(o);if(v=='Entregue'&&rs>0.005)setTimeout(()=>toast('Atenção: O.S. entregue com '+R(rs)+' a receber'),r&&r.n?2600:0)}
 
 /* ---------- Finanças ---------- */
 const DP=()=>db.desp=db.desp||[];
@@ -1071,6 +1099,10 @@ async function genNotaPDF(n){if(noLib())return;const D0=n.dados||{},nfe=n.tipo==
  await Z.end(`${nfe?'NFe':'NFSe'}-${n.numero||n.ref}-OS-${n.osn}`)}
 
 /* ---- telas ---- */
+function nfAviso(o){const F=FC(),T=nfTotais(o),L=['nfe','nfse'].map(t=>notaAtiva(o.id,t,F.modo)).filter(n=>n&&n.status=='autorizado');if(!L.length)return'';
+ const dif=L.filter(n=>Math.abs(n.valor-(n.tipo=='nfe'?T.pecas:T.serv))>0.005),nm=L.map(n=>NTIPO[n.tipo]+' nº '+e(n.numero||'')).join(' e ');
+ return dif.length?`<div class="fbar" style="border-color:#B4472E;background:color-mix(in srgb,#B4472E 12%,var(--sf))">${svgi('alert')}<span><b>Valores diferentes da nota emitida.</b> ${dif.map(n=>`${NTIPO[n.tipo]}: nota ${R(n.valor)}, O.S. agora ${R(n.tipo=='nfe'?T.pecas:T.serv)}`).join(' · ')}. Cancele a nota e emita de novo, se for preciso.</span></div>`
+  :`<div class="fbar">${svgi('notas')}<span>Esta O.S. já tem ${nm}. Mudar itens ou valores aqui não altera a nota.</span></div>`}
 function Vnf(o){const F=FC(),T=nfTotais(o),real=F.modo=='api';
  const bloco=(tipo,tit,val,qtd)=>{const P=qtd?fiscalCheck(o,tipo):[],L=notasOS(o.id,tipo).slice().reverse(),at=notaAtiva(o.id,tipo,F.modo);
   return`<div class="card"><div class="bar" style="margin:0 0 6px"><b>${tit}</b><span class="sp"></span><span class="tot" style="font-size:20px">${R(val)}</span></div>
@@ -1529,7 +1561,7 @@ addEventListener('appinstalled',()=>{INST=null;toast('App instalado');if(typeof 
 if('serviceWorker' in navigator&&/^https?:/.test(location.protocol)){const SWW=navigator.serviceWorker,tinha=!!SWW.controller;let RL=false;
  SWW.addEventListener('controllerchange',()=>{if(!tinha||RL)return;RL=true;try{if(DIRTY){clearTimeout(TS);push()}}catch(x){}try{toast('Atualizando para a nova versão...')}catch(x){}setTimeout(()=>location.reload(),600)});
  addEventListener('load',()=>SWW.register('sw.js',{updateViaCache:'none'}).then(r=>{const up=()=>r.update().catch(()=>{});setInterval(up,30*60e3);document.addEventListener('visibilitychange',()=>{if(document.visibilityState=='visible')up()})}).catch(()=>{}))}
-const APP_VER='1.8.4';
+const APP_VER='1.8.5';
 (function(){const f=document.getElementById('ver');if(f)f.textContent='Fio-Mar Gestor · versão '+APP_VER;document.title=document.title})();
 boot();
 </script>
