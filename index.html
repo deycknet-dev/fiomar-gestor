@@ -236,7 +236,7 @@ function save(){DIRTY=true;clearTimeout(TS);TS=setTimeout(push,700);guardaLocal(
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState=='hidden'&&DIRTY){clearTimeout(TS);push()}});
 addEventListener('pagehide',()=>{if(DIRTY){clearTimeout(TS);push()}});
 async function boot(){const c=cfg0();
- if(c.url&&c.key&&window.supabase){SB=window.supabase.createClient(c.url,c.key);const{data}=await SB.auth.getSession();if(data.session){SES=data.session;await gate();if(!PEND){await pull();await recPend();setTimeout(()=>{fqRun();fmigra()},2500)}}}
+ if(c.url&&c.key&&window.supabase){SB=window.supabase.createClient(c.url,c.key);const{data}=await SB.auth.getSession();if(data.session){SES=data.session;await gate();if(!PEND){await pull();await recPend();setTimeout(()=>{fqRun();fmigra();cfgSlim()},2500)}}}
  render();setTimeout(entAutoSync,3000)}
 function setMode(m){AM=m;authView()}
 function authView(){const c=cfg0();$('#nav').style.display='none';
@@ -270,14 +270,14 @@ async function signup(){const em=$('#le').value.trim(),pw=$('#lp').value,p2=$('#
  if(pw!==p2)return m.textContent='As senhas não são iguais.';
  const{data,error}=await SB.auth.signUp({email:em,password:pw,options:{data:{nome:($('#ln')||{}).value||''},emailRedirectTo:location.href.split('#')[0]}});
  if(error){const t=error.message;m.textContent=/already/i.test(t)?'Este e-mail já tem conta. Use a aba Entrar.':/not allowed|disabled/i.test(t)?'O cadastro de novas contas está desativado no Supabase.':/password/i.test(t)?'Senha fraca. Use ao menos 8 caracteres, com letras e números.':'Erro: '+t;return}
- if(data.session){SES=data.session;await gate();if(!PEND){await pull();await recPend();setTimeout(()=>{fqRun();fmigra()},2500)}S.v='dash';render()}
+ if(data.session){SES=data.session;await gate();if(!PEND){await pull();await recPend();setTimeout(()=>{fqRun();fmigra();cfgSlim()},2500)}S.v='dash';render()}
  else{m.style.color='var(--ac)';m.textContent='Conta criada. Enviamos um link de confirmação para '+em+'. Confirme o e-mail, entre e aguarde a liberação do administrador.'}}
 function saveCfg(){const url=$('#su').value.trim().replace(/\/$/,''),key=$('#sk').value.trim();if(!/^https:\/\/.+/.test(url)||key.length<20)return toast('Informe a URL e a chave anon do projeto');localStorage.setItem(SBK,JSON.stringify({url,key}));boot()}
 function resetCfg(){localStorage.removeItem(SBK);SB=null;boot()}
 async function login(){const em=$('#le').value.trim(),pw=$('#lp').value;$('#lerr').textContent='';if(!em||!pw){$('#lerr').textContent='Informe e-mail e senha.';return}
  const{data,error}=await SB.auth.signInWithPassword({email:em,password:pw});
  if(error){if(/not confirmed/i.test(error.message)){$('#lerr').innerHTML='Confirme o e-mail pelo link enviado antes de entrar. <a href="#" onclick="resend();return false">Reenviar e-mail</a>';return}$('#lerr').textContent=/invalid/i.test(error.message)?'E-mail ou senha incorretos.':'Erro: '+error.message;return}
- SES=data.session;await gate();if(!PEND){await pull();await recPend();setTimeout(()=>{fqRun();fmigra()},2500)}S.v='dash';render()}
+ SES=data.session;await gate();if(!PEND){await pull();await recPend();setTimeout(()=>{fqRun();fmigra();cfgSlim()},2500)}S.v='dash';render()}
 async function doOut(){clearTimeout(TS);await push();await SB.auth.signOut();SES=null;ADM=false;LASTV=null;CONF=false;DIRTY=false;db=load();S.v='dash';render()}
 function dlBlob(b,n){const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=n;document.body.appendChild(a);a.click();a.remove();toast('PDF baixado')}
 function toast(t){const o=$('#toast');o.textContent=t;o.style.display='block';setTimeout(()=>o.style.display='none',2400)}
@@ -640,7 +640,7 @@ function cropOk(){const C=CR,cv=$('#crc'),b=C.b,kx=C.src.width/cv.width,ky=C.src
  if(rd){x.save();x.beginPath();x.ellipse(out.width/2,out.height/2,out.width/2,out.height/2,0,0,Math.PI*2);x.clip()}
  x.drawImage(C.src,sx,sy,sw,sh,0,0,out.width,out.height);if(rd)x.restore();
  closeM();C.done(out.toDataURL(o.png||(rd&&!o.white)?'image/png':'image/jpeg',.92),rd,PLT)}
-const cropOpt=k=>({max:k=='logo'?800:600,png:k=='logo',white:k=='assin'});
+const cropOpt=k=>({max:k=='logo'?360:600,png:k=='logo',white:k=='assin'});
 const cfgSet=(k,d,rd)=>{const c=db.cfg=db.cfg||{};c[k]=d;if(k=='logo')c.logoRound=!!rd;save();render();toast('Imagem salva')};
 function cfgImg(k,f){cropImg(f,cropOpt(k),(d,rd)=>cfgSet(k,d,rd))}
 function cfgEdit(k){cropImg((db.cfg||{})[k],cropOpt(k),(d,rd)=>cfgSet(k,d,rd))}
@@ -1309,6 +1309,10 @@ async function fqRun(){if(FQRUN||!SB||!SES||PEND)return;FQRUN=true;try{let q=(aw
 addEventListener('online',()=>{fqRun();fmigra()});setInterval(()=>{fqRun()},60000);
 /* foto nova: comprime, guarda no aparelho, entra na fila e devolve a referência */
 function picRef(file,cb){pic(file,d=>{if(!SES)return cb(d);const p=fpath();FD[p]=d;IDB.set('f:'+p,d).then(()=>fqAdd(p)).then(fqRun);cb('sb:'+p)})}
+/* reduz logo/assinatura antigos muito grandes (eram salvos com até 800 px) */
+function imgSlim(d,max){return new Promise(ok=>{const i=new Image();i.onload=()=>{const k=Math.min(1,max/Math.max(i.width,i.height));if(k>=1)return ok(d);const c=document.createElement('canvas');c.width=Math.round(i.width*k);c.height=Math.round(i.height*k);
+ const png=/^data:image\/png/.test(d),x=c.getContext('2d');if(!png){x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height)}x.drawImage(i,0,0,c.width,c.height);const n=c.toDataURL(png?'image/png':'image/jpeg',.9);ok(n.length<d.length?n:d)};i.onerror=()=>ok(d);i.src=d})}
+async function cfgSlim(){const c=db.cfg||{};let mud=0;for(const[k,max] of [['logo',360],['assin',600]]){const d=c[k];if(typeof d=='string'&&d.startsWith('data:image')&&d.length>150000){const n=await imgSlim(d,max);if(n!==d&&n.length<d.length){c[k]=n;mud++}}}if(mud){save();render()}}
 /* move as fotos antigas (dentro dos dados) para o bucket, uma vez */
 async function fmigra(){if(FMIG||!SB||!SES||PEND||navigator.onLine===false)return;const slots=[],map={};
  const add=(get,set)=>{const v=get();if(typeof v=='string'&&v.startsWith('data:image'))slots.push([v,set])};
@@ -1606,7 +1610,7 @@ addEventListener('appinstalled',()=>{INST=null;toast('App instalado');if(typeof 
 if('serviceWorker' in navigator&&/^https?:/.test(location.protocol)){const SWW=navigator.serviceWorker,tinha=!!SWW.controller;let RL=false;
  SWW.addEventListener('controllerchange',()=>{if(!tinha||RL)return;RL=true;try{if(DIRTY){clearTimeout(TS);push()}}catch(x){}try{toast('Atualizando para a nova versão...')}catch(x){}setTimeout(()=>location.reload(),600)});
  addEventListener('load',()=>SWW.register('sw.js',{updateViaCache:'none'}).then(r=>{const up=()=>r.update().catch(()=>{});setInterval(up,30*60e3);document.addEventListener('visibilitychange',()=>{if(document.visibilityState=='visible')up()})}).catch(()=>{}))}
-const APP_VER='1.9.0';
+const APP_VER='1.9.1';
 (function(){const f=document.getElementById('ver');if(f)f.textContent='Fio-Mar Gestor · versão '+APP_VER;document.title=document.title})();
 boot();
 </script>
