@@ -366,6 +366,7 @@ function interpreta(frase) {
     const W = palavras(T.o), us = new Set(), ent = achaEnt(W, us, plInfo);
     ent.usa.forEach(i => us.add(i));
     let desc = sobra(W, us).replace(/^(?:um|uma|o|a)\s+/i, '');
+    if (/^(?:(?:um|uma|o|a)\s+)?(?:servico|servicos|horario|agendamento)?$/.test(N(desc).trim())) { desc = ''; R.avisos.push('Escolha o serviço') }
     const sv = achaSvc(desc);
     if (plInfo && !plInfo.veh) R.avisos.push(plInfo.placa ? 'Placa ' + plInfo.placa + ' não cadastrada' : 'Placa não encontrada');
     if (!ent.cli && !ent.veh && !ent.avisos.length) R.avisos.push('Cliente não identificado: escolha na lista');
@@ -440,7 +441,12 @@ const esc = s => (typeof e == 'function' ? e(s) : String(s == null ? '' : s).rep
 const SR = UI && (window.SpeechRecognition || window.webkitSpeechRecognition);
 const MIC = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4M8 22h8"/></svg>';
 const EX = ['Agenda revisão do Onix do Carlos quinta às 14h', 'Placa QRT4B21', 'Despesa de 350 reais de conta de luz', 'Adiciona 2 velas de 45 reais na O.S. 12', 'Recebi 500 no pix da O.S. do Carlos', 'Abre a agenda de hoje'];
-let rec = null, ouvindo = false, finalTxt = '';
+let rec = null, ouvindo = false, fimV = true, acum = '', sess = '', inter = '', tmr = 0, t0 = 0, ouviu = false;
+/* quanto tempo de silêncio espera antes de enviar (o usuário escolhe) */
+const PAUSAS = [2000, 3000, 5000];
+const lsG = k => { try { return localStorage.getItem(k) } catch (x) { return null } };
+const lsS = (k, v) => { try { localStorage.setItem(k, v) } catch (x) { } };
+let PAUSA = +lsG('vz_pausa') || 3000; if (!PAUSAS.includes(PAUSA)) PAUSA = 3000;
 
 function css() {
   if (document.getElementById('vzcss')) return;
@@ -465,7 +471,10 @@ body:has(#nav[style*="none"]) #vzfab{display:none}
 .vzv{border:1px solid var(--ln);border-left:4px solid var(--c,var(--hi));border-radius:10px;padding:10px 12px;margin:0 0 10px}
 .vzv .pl{font:600 13px ui-monospace,Menlo,monospace;padding:3px 8px;border-radius:6px;background:#15212B;color:#F5B700;display:inline-block}
 .vzv h3{margin:6px 0 2px;font-size:20px}.vzv p{margin:3px 0;font-size:14px}.vzv .muted{font-size:13px}
-.vzv .bar{margin:10px 0 0}.vzv .bar button{margin:0}`;
+.vzv .bar{margin:10px 0 0}.vzv .bar button{margin:0}
+.vzok{margin:0;flex:none}
+.vzp{display:flex;align-items:center;gap:6px;margin:0 0 10px;font-size:13px;color:var(--mut)}.vzp button{margin:0;padding:5px 10px;font-size:13px;border-radius:99px}.vzp button.on{background:var(--hi);color:#15212B;border-color:var(--hi)}
+.vzbar{height:4px;border-radius:2px;background:var(--ln);overflow:hidden;margin:-6px 0 12px}.vzbar i{display:block;height:100%;width:0;background:var(--hi)}`;
   document.head.appendChild(s)
 }
 function monta() {
@@ -481,26 +490,69 @@ function abre() {
   if (typeof SES == "undefined" || !SES) return toast && toast('Entre na sua conta primeiro');
   const z = document.getElementById('vz');
   z.innerHTML = `<div class="ov" onclick="if(event.target===this)VZ.fecha()"><div class="sh" role="dialog" aria-label="Assistente de voz">
-  <div class="vzt"><button type="button" class="vzm" id="vzmic" aria-label="Falar">${MIC}</button><h2 id="vzst">${SR ? 'Toque e fale' : 'Digite o comando'}</h2><button type="button" class="sm" onclick="VZ.fecha()">Fechar</button></div>
+  <div class="vzt"><button type="button" class="vzm" id="vzmic" aria-label="Falar">${MIC}</button><h2 id="vzst">${SR ? 'Toque e fale' : 'Digite o comando'}</h2><button type="button" class="pr vzok" id="vzok" style="display:none" onclick="VZ.pronto()">Pronto</button><button type="button" class="sm" onclick="VZ.fecha()">Fechar</button></div>
   <div class="vzo" id="vzout"><i>${SR ? 'Ex.: “agenda troca de óleo do Gol do João amanhã às 9h”' : 'Este navegador não tem reconhecimento de voz. Use o Chrome no Android, ou digite abaixo.'}</i></div>
+  ${SR ? `<div class="vzbar"><i id="vzbarra"></i></div><div class="vzp">Enviar depois de ${PAUSAS.map(p => `<button type="button" class="sm${p == PAUSA ? ' on' : ''}" onclick="VZ.pausa(${p},this)">${p / 1000} s</button>`).join('')} de silêncio</div>` : ''}
   <form class="vzf" onsubmit="event.preventDefault();VZ.roda(this.q.value)"><input name="q" id="vzq" placeholder="Ou digite aqui..." autocomplete="off"><button class="pr">OK</button></form>
   <div class="vzx"><small>Exemplos (toque para testar)</small>${EX.map(x => `<button type="button" onclick="VZ.roda(this.textContent)">${esc(x)}</button>`).join('')}</div></div></div>`;
-  document.getElementById('vzmic').onclick = () => ouvindo ? para() : ouve();
+  document.getElementById('vzmic').onclick = () => ouvindo ? pronto() : ouve();
   if (SR) ouve()
 }
 function st(t) { const x = document.getElementById('vzst'); if (x) x.textContent = t }
 function out(h) { const x = document.getElementById('vzout'); if (x) x.innerHTML = h }
+/* Escuta contínua: junta tudo o que for falado e só envia depois de PAUSA ms de silêncio
+   (ou ao tocar em Pronto). Se o Chrome encerrar sozinho numa pausa, volta a ouvir. */
+const junta = (...p) => p.map(x => String(x || '').trim()).filter(Boolean).reduce((a, b) => !a ? b : N(b).startsWith(N(a)) ? b : a + ' ' + b, '');
+const tudo = () => junta(acum, sess, inter);
+function mic(on) { const m = document.getElementById('vzmic'); if (m) m.classList.toggle('on', on); const k = document.getElementById('vzok'); if (k) k.style.display = on && tudo() ? '' : 'none' }
+function barra(ms) { const b = document.getElementById('vzbarra'); if (!b) return; b.style.transition = 'none'; b.style.width = '0'; if (ms) { void b.offsetWidth; b.style.transition = 'width ' + ms + 'ms linear'; b.style.width = '100%' } }
+function arma(ms) { clearTimeout(tmr); tmr = setTimeout(() => ouviu ? pronto() : semFala(), ms); barra(ouviu ? ms : 0) }
+function semFala() { fimV = true; parar(); mic(false); st('Não ouvi nada. Toque e fale') }
+function mostra() { const t = junta(acum, sess); out(t || inter ? esc(t) + (inter ? ' <i>' + esc(inter) + '</i>' : '') : '<i>Pode falar...</i>'); mic(true) }
 function ouve() {
   if (!SR) return;
-  try { rec = new SR() } catch (x) { return st('Microfone indisponível') }
-  rec.lang = 'pt-BR'; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1; finalTxt = '';
-  rec.onstart = () => { ouvindo = true; st('Ouvindo...'); const m = document.getElementById('vzmic'); if (m) m.classList.add('on') };
-  rec.onresult = ev => { let t = '', f = ''; for (let i = 0; i < ev.results.length; i++) { const r = ev.results[i]; (r.isFinal ? (f += r[0].transcript) : (t += r[0].transcript)) } if (f) finalTxt = f; out(esc(f || '') + (t ? ' <i>' + esc(t) + '</i>' : '')) };
-  rec.onerror = ev => { ouvindo = false; const m = document.getElementById('vzmic'); if (m) m.classList.remove('on'); st(ev.error == 'not-allowed' || ev.error == 'service-not-allowed' ? 'Permita o microfone' : ev.error == 'no-speech' ? 'Não ouvi nada. Toque e fale' : ev.error == 'network' ? 'Sem internet para a voz. Digite abaixo' : 'Toque e fale de novo'); if (ev.error == 'not-allowed') out('<i>Libere o microfone para este site: toque no cadeado ao lado do endereço &gt; Permissões &gt; Microfone.</i>') };
-  rec.onend = () => { ouvindo = false; const m = document.getElementById('vzmic'); if (m) m.classList.remove('on'); if (finalTxt) roda(finalTxt); else if (document.getElementById('vzst') && /Ouvindo/.test(document.getElementById('vzst').textContent)) st('Toque e fale') };
-  try { rec.start() } catch (x) { st('Toque e fale') }
+  acum = sess = inter = ''; ouviu = false; fimV = false; t0 = Date.now();
+  st('Ouvindo...'); out('<i>Pode falar...</i>'); arma(8000); inicia()
 }
-function para() { ouvindo = false; try { rec && rec.abort() } catch (x) { } rec = null }
+function inicia() {
+  if (fimV) return;
+  let r; try { r = new SR() } catch (x) { fimV = true; return st('Microfone indisponível') }
+  rec = r; r.__t = Date.now(); r.lang = 'pt-BR'; r.interimResults = true; r.continuous = true; r.maxAlternatives = 1;
+  r.onstart = () => { ouvindo = true; mic(true) };
+  r.onresult = ev => {
+    if (rec !== r || fimV) return;
+    const fins = []; let tmp = '';
+    for (let i = 0; i < ev.results.length; i++) {
+      const x = ev.results[i], tx = String(x[0].transcript || '').trim(); if (!tx) continue;
+      if (x.isFinal) { /* no Android o Chrome às vezes repete o trecho anterior dentro do próximo */ const u = fins[fins.length - 1]; if (u && N(tx).startsWith(N(u))) fins[fins.length - 1] = tx; else fins.push(tx) }
+      else tmp += ' ' + tx
+    }
+    sess = junta(...fins); inter = tmp.trim();
+    if (inter && sess && N(inter).startsWith(N(sess))) inter = inter.slice(sess.length).trim();
+    if (sess || inter) ouviu = true;
+    mostra(); arma(PAUSA)
+  };
+  r.onerror = ev => {
+    if (rec !== r) return;
+    if (ev.error == 'no-speech' || ev.error == 'aborted') return; /* segue ouvindo; onend reinicia */
+    fimV = true; clearTimeout(tmr); barra(0); ouvindo = false; mic(false);
+    st(ev.error == 'not-allowed' || ev.error == 'service-not-allowed' ? 'Permita o microfone' : ev.error == 'network' ? 'Sem internet para a voz. Digite abaixo' : ev.error == 'audio-capture' ? 'Microfone ocupado ou ausente' : 'Toque e fale de novo');
+    if (ev.error == 'not-allowed' || ev.error == 'service-not-allowed') out('<i>Libere o microfone para este site: toque no cadeado ao lado do endereço &gt; Permissões &gt; Microfone.</i>');
+    else if (tudo()) { const q = document.getElementById('vzq'); if (q) q.value = tudo() }
+  };
+  r.onend = () => {
+    if (rec !== r) return;
+    ouvindo = false; acum = junta(acum, sess, inter); sess = inter = '';
+    if (fimV) return;
+    if (Date.now() - t0 > 60000) return pronto(); /* limite de 1 minuto por comando */
+    setTimeout(inicia, Date.now() - r.__t < 1500 ? 600 : 120) /* o Chrome encerrou numa pausa: volta a ouvir sem perder o que já foi dito */
+  };
+  try { r.start() } catch (x) { setTimeout(() => { if (!fimV && rec === r) inicia() }, 300) }
+}
+function parar() { clearTimeout(tmr); barra(0); const r = rec; rec = null; ouvindo = false; try { r && r.abort() } catch (x) { } }
+function pronto() { if (fimV && !tudo()) return; fimV = true; const t = tudo(); parar(); mic(false); if (t) roda(t); else st('Toque e fale') }
+function para() { fimV = true; parar() }
+function pausa(ms, b) { PAUSA = ms; lsS('vz_pausa', ms); document.querySelectorAll('.vzp button').forEach(x => x.classList.toggle('on', x === b)); if (ouvindo && ouviu) arma(PAUSA) }
 
 /* fala uma resposta curta (útil com as mãos sujas) */
 function diz(t) { try { if (!window.speechSynthesis) return; speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(t); u.lang = 'pt-BR'; u.rate = 1.05; speechSynthesis.speak(u) } catch (x) { } }
@@ -580,7 +632,7 @@ function mostraPlaca(r) {
   document.getElementById('modal').innerHTML = `<div class="ov" onclick="if(event.target===this)closeM()"><div class="md">${h}</div></div>`
 }
 
-G.VZ = { interpreta, numWords, achaPlaca, canon, roda, fecha, abre, executa, mostraPlaca };
+G.VZ = { interpreta, numWords, achaPlaca, canon, roda, fecha, abre, executa, mostraPlaca, pronto, pausa };
 if (UI) { if (document.readyState == 'loading') document.addEventListener('DOMContentLoaded', monta); else monta();
   document.addEventListener('keydown', ev => { if (ev.key == 'Escape' && document.getElementById('vz') && document.getElementById('vz').innerHTML) fecha() }) }
 })(typeof window != 'undefined' ? window : globalThis);
