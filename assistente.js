@@ -26,6 +26,23 @@ const addD = (iso, n) => { const d = new Date(iso + 'T12:00'); d.setDate(d.getDa
 const toNum = x => { if (typeof nBR == 'function') return nBR(x); const v = +String(x).replace(/\./g, '').replace(',', '.'); return isFinite(v) ? v : NaN };
 const cap = s => s ? s[0].toUpperCase() + s.slice(1) : s;
 
+/* ---------- palavras parecidas (erros do reconhecimento de voz) ---------- */
+function lev(a, b) { if (a == b) return 0; const m = a.length, n = b.length; if (!m || !n) return m || n; let p = Array.from({ length: n + 1 }, (_, j) => j); for (let i = 1; i <= m; i++) { const c = [i]; for (let j = 1; j <= n; j++) c[j] = Math.min(p[j] + 1, c[j - 1] + 1, p[j - 1] + (a[i - 1] == b[j - 1] ? 0 : 1)); p = c } return p[n] }
+/* a e b já normalizadas; nomes curtos só batem iguais */
+const parece = (a, b) => a == b || a + 's' == b || b + 's' == a || (Math.min(a.length, b.length) >= 4 && lev(a, b) <= (Math.min(a.length, b.length) >= 7 ? 2 : 1));
+/* o Android às vezes repete um pedaço: "visse de diagnóstico esse de diagnóstico" -> uma vez só */
+function semRepeticao(s) {
+  let w = String(s).split(/\s+/).filter(Boolean);
+  const k = x => N(x).replace(/[^a-z0-9]/g, '');
+  for (let n = Math.min(6, Math.floor(w.length / 2)); n >= 2; n--) {
+    for (let i = 0; i + 2 * n <= w.length; i++) {
+      let dif = 0; for (let j = 0; j < n; j++) if (!parece(k(w[i + j]), k(w[i + n + j])) && ++dif > (n >= 3 ? 1 : 0)) break;
+      if (dif <= (n >= 3 ? 1 : 0) && w.slice(i, i + n).some(x => k(x).length >= 4)) { w.splice(i + n, n); i-- }
+    }
+  }
+  return w.join(' ')
+}
+
 /* ---------- números falados ("trezentos e cinquenta" -> 350) ---------- */
 const NUM = { zero: 0, um: 1, uma: 1, dois: 2, duas: 2, tres: 3, quatro: 4, cinco: 5, seis: 6, sete: 7, oito: 8, nove: 9, dez: 10, onze: 11, doze: 12, treze: 13, quatorze: 14, catorze: 14, quinze: 15, dezesseis: 16, dezasseis: 16, dezessete: 17, dezoito: 18, dezenove: 19, vinte: 20, trinta: 30, quarenta: 40, cinquenta: 50, sessenta: 60, setenta: 70, oitenta: 80, noventa: 90, cem: 100, cento: 100, duzentos: 200, duzentas: 200, trezentos: 300, trezentas: 300, quatrocentos: 400, quinhentos: 500, seiscentos: 600, setecentos: 700, oitocentos: 800, novecentos: 900 };
 const plc = v => v >= 100 && v % 100 == 0 ? 100 : v >= 20 && v % 10 == 0 ? 10 : 1;
@@ -226,7 +243,7 @@ const GEN = new Set('flex completo completa turbo sedan hatch total plus sport s
 const toks = s => N(s).split(/[^a-z0-9]+/).filter(x => x.length >= 3 && !STOP.has(x));
 function achaEnt(words, usados, placaInfo) {
   const W = words.map((w, i) => ({ i, n: N(w).replace(/[^a-z0-9]/g, '') })).filter(x => x.n && !usados.has(x.i));
-  const pos = n => W.filter(x => x.n == n).map(x => x.i);
+  const pos = n => W.filter(x => x.n == n).map(x => x.i), posP = n => W.filter(x => parece(x.n, n)).map(x => x.i);
   const C = (db && db.clients) || [], V = veics(), r = { cli: '', veh: '', usa: [], avisos: [] };
   /* veículo pela placa */
   if (placaInfo && placaInfo.veh) { r.veh = placaInfo.veh.id; r.cli = placaInfo.veh.cli || '' }
@@ -234,7 +251,7 @@ function achaEnt(words, usados, placaInfo) {
   let melhor = 0, cand = [];
   C.forEach(c => {
     const t = [...new Set(toks(c.nome))]; let sc = 0, us = [];
-    t.forEach((x, k) => { const p = pos(x); if (p.length) { sc += k == 0 ? 1.5 : 1; us.push(...p) } });
+    t.forEach((x, k) => { const p = pos(x), q = p.length ? p : posP(x); if (q.length) { sc += (k == 0 ? 1.5 : 1) * (p.length ? 1 : 0.8); us.push(...q) } });
     if (sc > melhor) { melhor = sc; cand = [{ c, us }] } else if (sc && sc == melhor) cand.push({ c, us })
   });
   /* veículos pelo modelo */
@@ -254,7 +271,7 @@ function achaEnt(words, usados, placaInfo) {
       else if (seus.length == 1) { r.veh = seus[0].id; doCli.forEach(x => r.usa.push(...x.us)) }
       else if (seus.length > 1) r.avisos.push('Escolha qual veículo de ' + c.nome.split(' ')[0])
     } else if (cs.length > 1) {
-      r.avisos.push(cs.length + ' clientes com nome parecido: escolha na lista'); cs.forEach(x => r.usa.push(...x.us))
+      r.avisos.push(cs.length + ' clientes com nome parecido (' + cs.slice(0, 3).map(x => x.c.nome).join(', ') + '): escolha na lista'); cs.forEach(x => r.usa.push(...x.us))
     } else if (vc.length == 1) { r.veh = vc[0].v.id; r.cli = vc[0].v.cli || ''; r.usa.push(...vc[0].us) }
     else if (vc.length > 1) { r.avisos.push(vc.length + ' veículos com esse modelo: escolha o cliente'); vc.forEach(x => r.usa.push(...x.us)) }
   } else {
@@ -262,12 +279,20 @@ function achaEnt(words, usados, placaInfo) {
     cand.filter(x => x.c.id == r.cli).forEach(x => r.usa.push(...x.us));
     vc.filter(x => x.v.id == r.veh).forEach(x => r.usa.push(...x.us))
   }
+  /* "para o cliente Fulano": se não achou no cadastro, avisa com o nome dito e não deixa o nome ir para o serviço */
+  for (let i = 0; i < words.length - 1; i++) {
+    if (!/^(cliente|senhor|senhora|sr|sra|dona)$/.test(N(words[i]).replace(/[^a-z]/g, ''))) continue;
+    const nm = []; for (let j = i + 1; j < words.length && nm.length < 2; j++) { const k = N(words[j]).replace(/[^a-z]/g, ''); if (!k || LIGA.has(k) || /^\d/.test(words[j])) break; nm.push(j) }
+    if (!nm.length) continue;
+    if (!r.cli && !r.avisos.some(x => /parecido|modelo/.test(x))) r.avisos.push('Cliente “' + nm.map(j => words[j].replace(/[.,!?;:]+$/, '')).join(' ') + '” não encontrado no cadastro: escolha ou cadastre');
+    r.usa.push(i, ...nm); r.nomeDito = true; break
+  }
   return r
 }
 
 /* ---------- descrição: o que sobrou da frase ---------- */
 const LIGA = new Set('de do da dos das e o a os as no na nos nas para pra pro com pelo pela ao em um uma que pro'.split(' '));
-const LIXO = new Set('carro veiculo cliente placa senhor senhora sr sra dona seu sua por favor ai ae entao tipo ne beleza cobrar cobra cobrando cobrei preco valor custo custou custa total cada unidade unidades reais real'.split(' '));
+const LIXO = new Set('esse essa isso este esta aquele aquela carro veiculo cliente placa senhor senhora sr sra dona seu sua por favor ai ae entao tipo ne beleza cobrar cobra cobrando cobrei preco valor custo custou custa total cada unidade unidades reais real'.split(' '));
 function sobra(words, usados) {
   let L = words.map((w, i) => usados.has(i) ? null : w.trim()).filter(w => w && /[\p{L}\p{N}]/u.test(w)).map(w => w.replace(/[.,!?;:]+$/, ''));
   L = L.filter(w => !LIXO.has(N(w)));
@@ -304,10 +329,11 @@ const catDe = s => { const n = N(s); const c = CATK.find(([, re]) => re.test(n))
 /* ---------- serviço do catálogo da agenda ---------- */
 function achaSvc(desc) {
   const L = (typeof SV == 'function' ? SV() : (db && db.svcs) || []);
-  const d = new Set(toks(desc)); if (!d.size) return null;
-  let best = null, bs = 0;
-  L.forEach(s => { const t = toks(s.nome); if (!t.length) return; const hit = t.filter(x => d.has(x) || [...d].some(y => y.length >= 5 && (y.startsWith(x.slice(0, 5)) || x.startsWith(y.slice(0, 5))))).length, sc = hit / t.length + hit * 0.01; if (hit && sc > bs) { bs = sc; best = s } });
-  return bs >= 0.5 ? best : null
+  const d = [...new Set(toks(desc).filter(x => x.length >= 4 && !LIXO.has(x)))]; if (!d.length) return null;
+  const R = L.map(s => { const t = [...new Set(toks(s.nome))]; const hit = t.filter(x => d.some(y => parece(x, y) || (y.length >= 5 && x.length >= 5 && (y.startsWith(x.slice(0, 5)) || x.startsWith(y.slice(0, 5)))))).length; return { s, hit, sc: t.length ? hit / t.length : 0 } }).filter(x => x.hit).sort((a, b) => b.hit - a.hit || b.sc - a.sc);
+  if (!R.length) return null;
+  if (R.length > 1 && R[1].hit == R[0].hit && Math.abs(R[1].sc - R[0].sc) < 0.01) return { ambiguo: R.filter(x => x.hit == R[0].hit && Math.abs(x.sc - R[0].sc) < 0.01).map(x => x.s.nome) };
+  return R[0].s
 }
 
 /* ---------- telas ---------- */
@@ -315,7 +341,7 @@ const TELAS = [['dash', /\b(painel|inicio|tela inicial|resumo)\b/], ['agenda', /
 
 /* ================= interpretar ================= */
 function interpreta(frase) {
-  const txt0 = String(frase || '').replace(/\s+/g, ' ').trim();
+  const txt0 = semRepeticao(String(frase || '').replace(/\s+/g, ' ').trim());
   const txt = numWords(txt0), n = N(txt), R = { texto: txt0, avisos: [] };
   if (!n) return { ...R, tipo: '?' };
   const T = new Txt(txt);
@@ -367,11 +393,17 @@ function interpreta(frase) {
     ent.usa.forEach(i => us.add(i));
     let desc = sobra(W, us).replace(/^(?:um|uma|o|a)\s+/i, '');
     if (/^(?:(?:um|uma|o|a)\s+)?(?:servico|servicos|horario|agendamento)?$/.test(N(desc).trim())) { desc = ''; R.avisos.push('Escolha o serviço') }
-    const sv = achaSvc(desc);
+    let sv = achaSvc(desc);
+    if (sv && sv.ambiguo) { R.avisos.push('Serviço parecido com: ' + sv.ambiguo.slice(0, 3).join(', ') + '. Escolha na lista'); sv = null; desc = '' }
+    const temCat = (typeof SV == 'function' ? SV() : (db && db.svcs) || []).length > 0;
+    /* sem serviço do catálogo: frase curta vira o serviço; frase longa vai para observações */
+    let obsLivre = '';
+    if (!sv && desc && temCat && palavras(desc).length > 4) { obsLivre = desc; desc = ''; R.avisos.push('Escolha o serviço (o que você disse foi para Observações)') }
+    const extra = sv ? toks(desc).filter(x => x.length >= 4 && !LIXO.has(x) && !toks(sv.nome).some(y => parece(x, y))) : [];
     if (plInfo && !plInfo.veh) R.avisos.push(plInfo.placa ? 'Placa ' + plInfo.placa + ' não cadastrada' : 'Placa não encontrada');
-    if (!ent.cli && !ent.veh && !ent.avisos.length) R.avisos.push('Cliente não identificado: escolha na lista');
+    if (!ent.cli && !ent.veh && !ent.avisos.length && !ent.nomeDito) R.avisos.push('Cliente não identificado: escolha na lista');
     if (!data && !R.avisos.some(a => /Data inv/.test(a))) R.avisos.push('Data não informada: ficou hoje');
-    return { ...R, tipo, avisos: [...R.avisos, ...ent.avisos], cli: ent.cli, veh: ent.veh, data: data || hoje(), hora: hora || '08:00', svc: sv ? sv.nome : desc, obs: sv && toks(desc).some(x => !toks(sv.nome).includes(x)) ? desc : '' }
+    return { ...R, tipo, avisos: [...R.avisos, ...ent.avisos], cli: ent.cli, veh: ent.veh, data: data || hoje(), hora: hora || '08:00', svc: sv ? sv.nome : desc, obs: obsLivre || (sv && extra.length >= 2 ? desc : '') }
   }
 
   if (tipo == 'desp') {
@@ -502,7 +534,15 @@ function st(t) { const x = document.getElementById('vzst'); if (x) x.textContent
 function out(h) { const x = document.getElementById('vzout'); if (x) x.innerHTML = h }
 /* Escuta contínua: junta tudo o que for falado e só envia depois de PAUSA ms de silêncio
    (ou ao tocar em Pronto). Se o Chrome encerrar sozinho numa pausa, volta a ouvir. */
-const junta = (...p) => p.map(x => String(x || '').trim()).filter(Boolean).reduce((a, b) => !a ? b : N(b).startsWith(N(a)) ? b : a + ' ' + b, '');
+function junta2(a, b) {
+  if (!a) return b; if (!b) return a;
+  if (N(b).startsWith(N(a))) return b; if (N(a).endsWith(N(b)) || N(a).includes(N(b))) return a;
+  const A = a.split(/\s+/), B = b.split(/\s+/), k = x => N(x).replace(/[^a-z0-9]/g, '');
+  /* o fim de a repete o começo de b (com uma palavra ouvida diferente)? */
+  for (let n = Math.min(A.length, B.length, 8); n >= 2; n--) { let dif = 0; for (let j = 0; j < n; j++) if (!parece(k(A[A.length - n + j]), k(B[j]))) dif++; if (dif <= (n >= 3 ? 1 : 0)) return A.concat(B.slice(n)).join(' ') }
+  return a + ' ' + b
+}
+const junta = (...p) => p.map(x => String(x || '').trim()).filter(Boolean).reduce(junta2, '');
 const tudo = () => junta(acum, sess, inter);
 function mic(on) { const m = document.getElementById('vzmic'); if (m) m.classList.toggle('on', on); const k = document.getElementById('vzok'); if (k) k.style.display = on && tudo() ? '' : 'none' }
 function barra(ms) { const b = document.getElementById('vzbarra'); if (!b) return; b.style.transition = 'none'; b.style.width = '0'; if (ms) { void b.offsetWidth; b.style.transition = 'width ' + ms + 'ms linear'; b.style.width = '100%' } }
@@ -524,7 +564,7 @@ function inicia() {
     const fins = []; let tmp = '';
     for (let i = 0; i < ev.results.length; i++) {
       const x = ev.results[i], tx = String(x[0].transcript || '').trim(); if (!tx) continue;
-      if (x.isFinal) { /* no Android o Chrome às vezes repete o trecho anterior dentro do próximo */ const u = fins[fins.length - 1]; if (u && N(tx).startsWith(N(u))) fins[fins.length - 1] = tx; else fins.push(tx) }
+      if (x.isFinal) fins.push(tx) /* junta() remove repetições do Android */
       else tmp += ' ' + tx
     }
     sess = junta(...fins); inter = tmp.trim();
