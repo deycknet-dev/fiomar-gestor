@@ -473,7 +473,7 @@ const esc = s => (typeof e == 'function' ? e(s) : String(s == null ? '' : s).rep
 const SR = UI && (window.SpeechRecognition || window.webkitSpeechRecognition);
 const MIC = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4M8 22h8"/></svg>';
 const EX = ['Agenda revisão do Onix do Carlos quinta às 14h', 'Placa QRT4B21', 'Despesa de 350 reais de conta de luz', 'Adiciona 2 velas de 45 reais na O.S. 12', 'Recebi 500 no pix da O.S. do Carlos', 'Abre a agenda de hoje'];
-let rec = null, ouvindo = false, fimV = true, acum = '', sess = '', inter = '', tmr = 0, t0 = 0, ouviu = false;
+let segura = false, errVoz = '', rec = null, ouvindo = false, fimV = true, acum = '', sess = '', inter = '', tmr = 0, t0 = 0, ouviu = false;
 /* quanto tempo de silêncio espera antes de enviar (o usuário escolhe) */
 const PAUSAS = [2000, 3000, 5000];
 const lsG = k => { try { return localStorage.getItem(k) } catch (x) { return null } };
@@ -485,7 +485,18 @@ function css() {
   const s = document.createElement('style'); s.id = 'vzcss';
   s.textContent = `#vzfab{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:18;width:58px;height:58px;border-radius:50%;border:0;padding:0;background:var(--hi);color:#15212B;box-shadow:0 6px 18px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;cursor:pointer;margin:0}
 #vzfab svg,.vzm svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:2.1;stroke-linecap:round;stroke-linejoin:round}
+#vzfab{touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;transition:transform .15s,background .15s}
 #vzfab:active{transform:scale(.94)}
+#vz.hold~#vzfab{display:flex!important;z-index:41;transform:scale(1.35);animation:vzp 1.3s ease-in-out infinite}
+#vz.hold~#vzfab.cancel{background:#B4472E;color:#fff;animation:none}
+.vzh{position:fixed;left:0;right:0;bottom:0;z-index:40;pointer-events:none;padding:0 12px calc(100px + env(safe-area-inset-bottom,0px));display:flex;justify-content:center;background:linear-gradient(transparent,rgba(0,0,0,.45) 45%)}
+.vzhc{pointer-events:none;background:var(--sf);color:var(--ink);width:100%;max-width:520px;border-radius:16px;padding:12px 14px;box-shadow:0 8px 28px rgba(0,0,0,.35)}
+.vzhs{display:flex;align-items:center;gap:8px;font-weight:600;font-size:15px}.vzhs:before{content:"";width:10px;height:10px;border-radius:50%;background:#E5484D;animation:vzb 1s infinite}
+@keyframes vzb{50%{opacity:.25}}
+.vzhc .vzo{margin:8px 0;min-height:44px;font-size:16px}
+.vzhd{font-size:13px;color:var(--mut);display:flex;justify-content:space-between;gap:8px}
+.vzh.cancel .vzhd{color:#B4472E;font-weight:600}
+.vzdica{font-size:12.5px;color:var(--mut);margin:-4px 0 10px}
 #modal:not(:empty)~#vzfab,#vz:not(:empty)~#vzfab{display:none}
 body:has(#nav[style*="none"]) #vzfab{display:none}
 #vz .ov{align-items:flex-end;padding:0}
@@ -513,22 +524,67 @@ function monta() {
   css();
   if (!document.getElementById('vz')) { const d = document.createElement('div'); d.id = 'vz'; document.body.appendChild(d) }
   if (!document.getElementById('vzfab')) {
-    const b = document.createElement('button'); b.id = 'vzfab'; b.type = 'button'; b.setAttribute('aria-label', 'Assistente de voz'); b.innerHTML = MIC; b.onclick = abre;
-    document.body.appendChild(b)
+    const b = document.createElement('button'); b.id = 'vzfab'; b.type = 'button'; b.setAttribute('aria-label', 'Assistente de voz: toque para abrir, segure para falar'); b.innerHTML = MIC;
+    document.body.appendChild(b); botaoSegurar(b)
   }
 }
-function fecha() { para(); const z = document.getElementById('vz'); if (z) z.innerHTML = '' }
-function abre() {
-  if (typeof SES == "undefined" || !SES) return toast && toast('Entre na sua conta primeiro');
-  const z = document.getElementById('vz');
+/* Segurar para falar (como no WhatsApp): segura = grava, solta = envia, arrasta para fora = cancela.
+   Toque rápido abre o painel completo. */
+const vibra = ms => { try { navigator.vibrate && navigator.vibrate(ms) } catch (x) { } };
+const logado = () => typeof SES != 'undefined' && !!SES;
+function botaoSegurar(b) {
+  let pd = null, tm = 0, hold = false, canc = false;
+  const z = () => document.getElementById('vz');
+  b.addEventListener('contextmenu', ev => ev.preventDefault());
+  b.addEventListener('pointerdown', ev => {
+    if (ev.button > 0) return; ev.preventDefault();
+    pd = { x: ev.clientX, y: ev.clientY }; hold = false; canc = false;
+    try { b.setPointerCapture(ev.pointerId) } catch (x) { }
+    clearTimeout(tm); tm = setTimeout(() => { if (!pd) return; hold = true; comecaSegurar() }, 250)
+  });
+  b.addEventListener('pointermove', ev => {
+    if (!pd || !hold) return;
+    const c = (pd.x - ev.clientX) > 80 || (pd.y - ev.clientY) > 120;
+    if (c != canc) { canc = c; b.classList.toggle('cancel', c); const h = document.querySelector('.vzh'); if (h) h.classList.toggle('cancel', c); const d = document.getElementById('vzhd'); if (d) d.innerHTML = c ? '<span>Solte para cancelar</span>' : '<span>‹ Arraste para cancelar</span><span>Solte para enviar</span>'; if (c) vibra(15) }
+  });
+  const fim = cancelou => { clearTimeout(tm); if (!pd) return; pd = null; b.classList.remove('cancel'); if (hold) { hold = false; terminaSegurar(cancelou || canc) } else if (!cancelou) abre() };
+  b.addEventListener('pointerup', () => fim(false));
+  b.addEventListener('pointercancel', () => fim(true));
+  b.addEventListener('lostpointercapture', () => { if (pd && hold) fim(false) });
+  b.addEventListener('click', ev => { if (ev.detail === 0) abre() }) /* teclado */
+}
+function comecaSegurar() {
+  if (!logado()) return toast && toast('Entre na sua conta primeiro');
+  if (!SR) { toast && toast('Segurar para falar precisa do Chrome no Android'); return abre() }
+  const z = document.getElementById('vz'); z.classList.add('hold'); errVoz = '';
+  z.innerHTML = `<div class="vzh"><div class="vzhc" role="status"><div class="vzhs" id="vzst">Ouvindo...</div><div class="vzo" id="vzout"><i>Pode falar...</i></div><div class="vzhd" id="vzhd"><span>‹ Arraste para cancelar</span><span>Solte para enviar</span></div></div></div>`;
+  vibra(25); segura = true; ouve()
+}
+function terminaSegurar(cancelou) {
+  segura = false;
+  if (cancelou) { para(); fecha(); vibra([10, 40, 10]); toast && toast('Cancelado'); return }
+  st('Enviando...'); vibra(15);
+  /* espera um instante para o Chrome entregar as últimas palavras */
+  setTimeout(() => {
+    const t = tudo(), e = errVoz; para();
+    if (t) { fecha(); roda(t); return }
+    fecha();
+    if (e) { abre(true); st(e == 'perm' ? 'Permita o microfone' : 'Toque e fale de novo'); if (e == 'perm') out('<i>Libere o microfone para este site: toque no cadeado ao lado do endereço &gt; Permissões &gt; Microfone.</i>') }
+    else toast && toast('Não ouvi nada. Segure o botão enquanto fala')
+  }, 600)
+}
+function fecha() { para(); segura = false; const z = document.getElementById('vz'); if (z) { z.innerHTML = ''; z.classList.remove('hold') } const b = document.getElementById('vzfab'); if (b) b.classList.remove('cancel') }
+function abre(semOuvir) {
+  if (!logado()) return toast && toast('Entre na sua conta primeiro');
+  const z = document.getElementById('vz'); z.classList.remove('hold');
   z.innerHTML = `<div class="ov" onclick="if(event.target===this)VZ.fecha()"><div class="sh" role="dialog" aria-label="Assistente de voz">
   <div class="vzt"><button type="button" class="vzm" id="vzmic" aria-label="Falar">${MIC}</button><h2 id="vzst">${SR ? 'Toque e fale' : 'Digite o comando'}</h2><button type="button" class="pr vzok" id="vzok" style="display:none" onclick="VZ.pronto()">Pronto</button><button type="button" class="sm" onclick="VZ.fecha()">Fechar</button></div>
   <div class="vzo" id="vzout"><i>${SR ? 'Ex.: “agenda troca de óleo do Gol do João amanhã às 9h”' : 'Este navegador não tem reconhecimento de voz. Use o Chrome no Android, ou digite abaixo.'}</i></div>
   ${SR ? `<div class="vzbar"><i id="vzbarra"></i></div><div class="vzp">Enviar depois de ${PAUSAS.map(p => `<button type="button" class="sm${p == PAUSA ? ' on' : ''}" onclick="VZ.pausa(${p},this)">${p / 1000} s</button>`).join('')} de silêncio</div>` : ''}
   <form class="vzf" onsubmit="event.preventDefault();VZ.roda(this.q.value)"><input name="q" id="vzq" placeholder="Ou digite aqui..." autocomplete="off"><button class="pr">OK</button></form>
-  <div class="vzx"><small>Exemplos (toque para testar)</small>${EX.map(x => `<button type="button" onclick="VZ.roda(this.textContent)">${esc(x)}</button>`).join('')}</div></div></div>`;
+  ${SR ? '<div class="vzdica">Dica: no botão amarelo, segure enquanto fala e solte para enviar (como no WhatsApp).</div>' : ''}<div class="vzx"><small>Exemplos (toque para testar)</small>${EX.map(x => `<button type="button" onclick="VZ.roda(this.textContent)">${esc(x)}</button>`).join('')}</div></div></div>`;
   document.getElementById('vzmic').onclick = () => ouvindo ? pronto() : ouve();
-  if (SR) ouve()
+  if (SR && semOuvir !== true) ouve()
 }
 function st(t) { const x = document.getElementById('vzst'); if (x) x.textContent = t }
 function out(h) { const x = document.getElementById('vzout'); if (x) x.innerHTML = h }
@@ -546,7 +602,7 @@ const junta = (...p) => p.map(x => String(x || '').trim()).filter(Boolean).reduc
 const tudo = () => junta(acum, sess, inter);
 function mic(on) { const m = document.getElementById('vzmic'); if (m) m.classList.toggle('on', on); const k = document.getElementById('vzok'); if (k) k.style.display = on && tudo() ? '' : 'none' }
 function barra(ms) { const b = document.getElementById('vzbarra'); if (!b) return; b.style.transition = 'none'; b.style.width = '0'; if (ms) { void b.offsetWidth; b.style.transition = 'width ' + ms + 'ms linear'; b.style.width = '100%' } }
-function arma(ms) { clearTimeout(tmr); tmr = setTimeout(() => ouviu ? pronto() : semFala(), ms); barra(ouviu ? ms : 0) }
+function arma(ms) { clearTimeout(tmr); if (segura) return; tmr = setTimeout(() => ouviu ? pronto() : semFala(), ms); barra(ouviu ? ms : 0) }
 function semFala() { fimV = true; parar(); mic(false); st('Não ouvi nada. Toque e fale') }
 function mostra() { const t = junta(acum, sess); out(t || inter ? esc(t) + (inter ? ' <i>' + esc(inter) + '</i>' : '') : '<i>Pode falar...</i>'); mic(true) }
 function ouve() {
@@ -575,6 +631,7 @@ function inicia() {
   r.onerror = ev => {
     if (rec !== r) return;
     if (ev.error == 'no-speech' || ev.error == 'aborted') return; /* segue ouvindo; onend reinicia */
+    errVoz = ev.error == 'not-allowed' || ev.error == 'service-not-allowed' ? 'perm' : ev.error;
     fimV = true; clearTimeout(tmr); barra(0); ouvindo = false; mic(false);
     st(ev.error == 'not-allowed' || ev.error == 'service-not-allowed' ? 'Permita o microfone' : ev.error == 'network' ? 'Sem internet para a voz. Digite abaixo' : ev.error == 'audio-capture' ? 'Microfone ocupado ou ausente' : 'Toque e fale de novo');
     if (ev.error == 'not-allowed' || ev.error == 'service-not-allowed') out('<i>Libere o microfone para este site: toque no cadeado ao lado do endereço &gt; Permissões &gt; Microfone.</i>');
@@ -584,7 +641,7 @@ function inicia() {
     if (rec !== r) return;
     ouvindo = false; acum = junta(acum, sess, inter); sess = inter = '';
     if (fimV) return;
-    if (Date.now() - t0 > 60000) return pronto(); /* limite de 1 minuto por comando */
+    if (Date.now() - t0 > 60000) return segura ? undefined : pronto(); /* limite de 1 minuto por comando */
     setTimeout(inicia, Date.now() - r.__t < 1500 ? 600 : 120) /* o Chrome encerrou numa pausa: volta a ouvir sem perder o que já foi dito */
   };
   try { r.start() } catch (x) { setTimeout(() => { if (!fimV && rec === r) inicia() }, 300) }
@@ -609,7 +666,7 @@ function roda(frase) {
   para();
   let r; try { r = interpreta(frase) } catch (x) { r = { tipo: '?', texto: frase } }
   G.VZ.ultimo = r;
-  if (r.tipo == '?') { st('Não entendi'); out(`“${esc(frase)}”<br><i>Tente começar com: agenda, placa, despesa, adiciona, recebi ou abre.</i>`); const q = document.getElementById('vzq'); if (q) q.value = frase; return }
+  if (r.tipo == '?') { if (!document.getElementById('vzq')) abre(true); st('Não entendi'); out(`“${esc(frase)}”<br><i>Tente começar com: agenda, placa, despesa, adiciona, recebi ou abre.</i>`); const q = document.getElementById('vzq'); if (q) q.value = frase; return }
   fecha();
   executa(r)
 }
