@@ -611,7 +611,7 @@ function editItem(w,n,os){const i=w.items[n];if(!i)return;const lk=!!i.pid;
    if(d<0)MV().push({id:uid(),pid:p.id,tipo:'E',q:-d,data:today(),obs:'Ajuste O.S. '+w.num})}
   const it={...i,...o,q,v};if(o.custo===''||o.custo==null)delete it.custo;else it.custo=+o.custo;if(lk)it.t=i.t;
   w.items[n]=it;save();render();toast('Item atualizado')},0,()=>{if(os)rmOS(n);else{w.items.splice(n,1);save();render()}})}
-function addItem(w){modal('Adicionar item',[['t','Tipo','select',['Serviço','Peça','Mão de obra']],['d','Descrição','text',0,1],['det','Detalhes (opcional)'],['q','Quantidade','number',0,1],['v','Valor unitário (R$)','number',0,1],['custo','Custo unitário (R$, opcional - usado no lucro)','number'],['ncm','NCM da peça (opcional, 8 dígitos)'],['ctrib','Cód. tributação nacional do serviço (opcional)']],{q:1,t:'Serviço'},o=>{if(!(+o.q>0))return toast('Quantidade inválida');if(!(+o.v>=0))return toast('Valor inválido');if(o.custo!==''&&o.custo!=null&&!(+o.custo>=0))return toast('Custo inválido');const it={...o,q:+o.q,v:+o.v};if(o.custo===''||o.custo==null)delete it.custo;else it.custo=+o.custo;w.items.push(it);save();render()})}
+function addItem(w,pre){modal('Adicionar item',[['t','Tipo','select',['Serviço','Peça','Mão de obra']],['d','Descrição','text',0,1],['det','Detalhes (opcional)'],['q','Quantidade','number',0,1],['v','Valor unitário (R$)','number',0,1],['custo','Custo unitário (R$, opcional - usado no lucro)','number'],['ncm','NCM da peça (opcional, 8 dígitos)'],['ctrib','Cód. tributação nacional do serviço (opcional)']],{q:1,t:'Serviço',...(pre||{})},o=>{if(!(+o.q>0))return toast('Quantidade inválida');if(!(+o.v>=0))return toast('Valor inválido');if(o.custo!==''&&o.custo!=null&&!(+o.custo>=0))return toast('Custo inválido');const it={...o,q:+o.q,v:+o.v};if(o.custo===''||o.custo==null)delete it.custo;else it.custo=+o.custo;w.items.push(it);save();render()})}
 function saveQuote(quiet){const q=S.q;if(!q.cli){if(!quiet)toast('Escolha ou cadastre o cliente');return}if(!q.veh)q.veh='';
  if(q.novo){delete q.novo;db.qseq++;db.quotes.push(q)}else db.quotes[db.quotes.findIndex(x=>x.id==q.id)]=q;save();if(!quiet)toast('Orçamento salvo')}
 function approve(){saveQuote(1);modal('Aceite do cliente',[['nome','Nome de quem aprova (assinatura)','text',0,1]],{},o=>{Object.assign(S.q,{status:'Aprovado',aprov:{nome:o.nome,data:today()}});saveQuote();render()},`<p class="muted">${TERMOS}</p>`)}
@@ -668,7 +668,7 @@ function pic(file,cb){const r=new FileReader();r.onload=()=>{const i=new Image()
 function ckSet(n,k,v){const o=od(S.id);(o.ck[n]=o.ck[n]||{})[k]=v;save();osTabsRefresh()}
 function ckFoto(n,f){if(f)picRef(f,d=>{ckSet(n,'foto',d);render()})}
 function addFotos(fs){const o=od(S.id),t=$('#ft').value;[...fs].forEach(f=>picRef(f,d=>{o.fotos.push({id:uid(),t,src:d,obs:''});save();render()}))}
-function addPag(){const o=od(S.id);modal('Registrar pagamento',[['forma','Forma','select',FP],['valor','Valor pago (R$)','number',0,1],['parc','Parcelas (se parcelado)','number'],['data','Data','date',0,1]],{valor:Math.max(0,oTot(o)-paid(o)),data:today(),parc:1},p=>{const v=+p.valor,rest=oTot(o)-paid(o);if(!(v>0))return toast('Informe um valor maior que zero');if(v>rest+0.005)return toast('Valor maior que o restante da O.S. ('+R(Math.max(0,rest))+')');o.pags.push({...p,valor:v});save();render()})}
+function addPag(pre){const o=od(S.id);modal('Registrar pagamento',[['forma','Forma','select',FP],['valor','Valor pago (R$)','number',0,1],['parc','Parcelas (se parcelado)','number'],['data','Data','date',0,1]],{valor:Math.max(0,oTot(o)-paid(o)),data:today(),parc:1,...(pre||{})},p=>{const v=+p.valor,rest=oTot(o)-paid(o);if(!(v>0))return toast('Informe um valor maior que zero');if(v>rest+0.005)return toast('Valor maior que o restante da O.S. ('+R(Math.max(0,rest))+')');o.pags.push({...p,valor:v});save();render()})}
 function waOS(){const o=od(S.id),c=cl(o.cli),v=o.veh?vlabel(vh(o.veh)):'';
  waDoc(genOS,o,c.tel,`Olá, ${c.nome}! Tudo bem?\n\nEsse documento é a ordem de serviço Nº ${o.num}${v?' do seu '+v:''}, com os serviços e peças registrados.\nSituação: ${o.status}\nValor total: ${R(oTot(o))}\n\nQualquer dúvida, estou à disposição.\n\n${empNome()}`)}
 function Vorder(){const o=od(S.id);if(!o)return Vorders();const T=[['resumo','Resumo'],['check','Checklist'],['laudo','Laudo'],['fotos','Fotos'],['pag','Pagamento'],...(DONO()?[['nf','Nota fiscal']]:[])];if(!DONO()&&S.tab=='nf')S.tab='resumo';
@@ -1040,7 +1040,7 @@ function chRosca(cats){const L=Object.entries(cats).filter(x=>x[1]>0).sort((a,b)
 function chTipo(a){const rows=[['Mão de obra',a.serv,a.serv-a.cOut],['Peças',a.pec,a.pec-a.cPec]],mx=Math.max(a.serv,a.pec,1),W=360,H=150,pw=W-4;let g='';
  rows.forEach(([l,rv,lc],i)=>{const y=6+i*72;g+=`<text x="0" y="${y+11}" style="font:600 12px 'Barlow',sans-serif;fill:var(--ink)">${l}</text><rect x="0" y="${y+18}" width="${Math.max(3,pw*rv/mx).toFixed(1)}" height="24" rx="4" style="fill:var(--ln)"/><rect x="0" y="${y+18}" width="${Math.max(0,pw*Math.max(0,lc)/mx).toFixed(1)}" height="24" rx="4" fill="#2E8B57"/><text class="cht" x="0" y="${y+58}">Receita ${R(rv)} · Lucro ${R(lc)} · Margem ${rv?Math.round(lc/rv*100):0}%</text>`});
  return svg(W,H,g,'Receita e lucro por tipo')+legend([['var(--ln)','Receita'],['#2E8B57','Lucro']])}
-function editDesp(id){const x=id?DP().find(d=>d.id==id):{data:today(),rec:'0',cat:'Outros'};
+function editDesp(id,pre){const x=id?DP().find(d=>d.id==id):{data:today(),rec:'0',cat:'Outros',...(pre||{})};
  modal(id?'Editar despesa':'Nova despesa',[['desc','Descrição (ex.: aluguel da oficina)','text',0,1],['cat','Categoria','select',CATS],['valor','Valor (R$)','number',0,1],['data','Data (ou início, se repetir)','date',0,1],['rec','Repete todo mês?','select',[['0','Não, só uma vez'],['1','Sim, todo mês']]],['fim','Repetir até (opcional)','date']],x,o=>{
   o.valor=+o.valor;if(!(o.valor>0))return toast('Informe um valor maior que zero');if(id)Object.assign(x,o);else DP().push({id:uid(),...o});save();render();toast('Despesa salva')},0,id&&(()=>{db.desp=DP().filter(d=>d.id!=id);save();render();toast('Despesa excluída')}))}
 function Vfin(){const P=periodo(),a=aggF(P.ms),b=aggF(P.prev),cm=(P.n<6?monthsBack(P.end,6):P.ms).map(fin),arec=db.orders.reduce((s,o)=>s+Math.max(0,oTot(o)-paid(o)),0),
@@ -1748,9 +1748,10 @@ addEventListener('appinstalled',()=>{INST=null;toast('App instalado');if(typeof 
 if('serviceWorker' in navigator&&/^https?:/.test(location.protocol)){const SWW=navigator.serviceWorker,tinha=!!SWW.controller;let RL=false;
  SWW.addEventListener('controllerchange',()=>{if(!tinha||RL)return;RL=true;try{if(DIRTY){clearTimeout(TS);push()}}catch(x){}try{toast('Atualizando para a nova versão...')}catch(x){}setTimeout(()=>location.reload(),600)});
  addEventListener('load',()=>SWW.register('sw.js',{updateViaCache:'none'}).then(r=>{const up=()=>r.update().catch(()=>{});setInterval(up,30*60e3);document.addEventListener('visibilitychange',()=>{if(document.visibilityState=='visible')up()})}).catch(()=>{}))}
-const APP_VER='2.0.0';
+const APP_VER='2.1.0';
 (function(){const f=document.getElementById('ver');if(f)f.textContent='Fio-Mar Gestor · versão '+APP_VER;document.title=document.title})();
 boot();
 </script>
+<script src="assistente.js"></script>
 </body>
 </html>
