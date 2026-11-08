@@ -21,6 +21,7 @@ function N(s) { s = String(s == null ? '' : s); let o = ''; for (let i = 0; i < 
 const p2 = n => String(n).padStart(2, '0');
 const hoje = () => (typeof today == 'function' ? today() : new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10));
 const isoD = d => d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate());
+const valida = s => { const d = new Date(s + 'T12:00'); return !isNaN(d) && isoD(d) == s ? s : 'INV' };
 const addD = (iso, n) => { const d = new Date(iso + 'T12:00'); d.setDate(d.getDate() + n); return isoD(d) };
 const toNum = x => { if (typeof nBR == 'function') return nBR(x); const v = +String(x).replace(/\./g, '').replace(',', '.'); return isFinite(v) ? v : NaN };
 const cap = s => s ? s[0].toUpperCase() + s.slice(1) : s;
@@ -142,15 +143,15 @@ function pegaData(t, passado) {
   const ano = (d, mo, y) => {
     let Y = y ? (+y < 100 ? 2000 + +y : +y) : +H.slice(0, 4), s = Y + '-' + p2(mo) + '-' + p2(d);
     if (!y) { if (!passado && s < H) s = (Y + 1) + s.slice(4); if (passado && s > H) s = (Y - 1) + s.slice(4) }
-    return s
+    return valida(s)
   };
   if ((m = t.take(/\b(?:dia\s+)?(\d{1,2})\s*\/\s*(\d{1,2})(?:\s*\/\s*(\d{2,4}))?\b/)) && +m[2] >= 1 && +m[2] <= 12) return ano(+m[1], +m[2], m[3]);
   if ((m = t.take(new RegExp('\\b' + PRE + '(\\d{1,2}) de (' + MESES.join('|') + ')(?: de (\\d{4}))?\\b')))) return ano(+m[1], MESES.indexOf(m[2]) + 1, m[3]);
   if ((m = t.take(/\b(?:(?:para|pra|no|ate)\s+)?(?:o\s+)?dia\s+(\d{1,2})\b/)) && +m[1] >= 1 && +m[1] <= 31) {
     const Y = +H.slice(0, 4), M = +H.slice(5, 7), d = +m[1]; let s = Y + '-' + p2(M) + '-' + p2(d);
-    if (!passado && s < H) { const n = new Date(Y, M, d, 12); s = isoD(n) }
-    if (passado && s > H) { const n = new Date(Y, M - 2, d, 12); s = isoD(n) }
-    return s
+    if (!passado && s < H) { s = (M == 12 ? Y + 1 : Y) + '-' + p2(M == 12 ? 1 : M + 1) + '-' + p2(d) }
+    if (passado && s > H) { s = (M == 1 ? Y - 1 : Y) + '-' + p2(M == 1 ? 12 : M - 1) + '-' + p2(d) }
+    return valida(s)
   }
   return ''
 }
@@ -159,7 +160,7 @@ function pegaData(t, passado) {
 function ajH(h, mi, per) {
   h = +h; mi = mi == 'meia' ? 30 : +(mi || 0);
   if (per == 'tarde' || per == 'noite') { if (h < 12) h += 12 } else if (!per && h >= 1 && h <= 6) h += 12;
-  if (h > 23 || mi > 59) return '';
+  if (h > 23 || mi > 59) return 'INV';
   return p2(h) + ':' + p2(mi)
 }
 function pegaHora(t) {
@@ -358,7 +359,9 @@ function interpreta(frase) {
 
   if (tipo == 'agenda') {
     T.take(/\b(?:por favor\s+)?(?:(?:me\s+)?(?:faz|faca|fazer)\s+(?:um|o)\s+)?(?:agend\w*|marc(?:a|ar|ou|e|ando)|reserv\w*)\b(?:\s+(?:um|uma|o|a)\s+(?:horario|agendamento)\b)?(?:\s+(?:para|pra|de)\b)?/);
-    const data = pegaData(T, false), hora = pegaHora(T);
+    let data = pegaData(T, false), hora = pegaHora(T);
+    if (data == 'INV') { data = ''; R.avisos.push('Data inválida: escolha a data') }
+    if (hora == 'INV') { hora = ''; R.avisos.push('Hora inválida: escolha a hora') } else if (!hora) R.avisos.push('Hora não informada: confira');
     tiraPlaca();
     const W = palavras(T.o), us = new Set(), ent = achaEnt(W, us, plInfo);
     ent.usa.forEach(i => us.add(i));
@@ -366,15 +369,14 @@ function interpreta(frase) {
     const sv = achaSvc(desc);
     if (plInfo && !plInfo.veh) R.avisos.push(plInfo.placa ? 'Placa ' + plInfo.placa + ' não cadastrada' : 'Placa não encontrada');
     if (!ent.cli && !ent.veh && !ent.avisos.length) R.avisos.push('Cliente não identificado: escolha na lista');
-    if (!hora) R.avisos.push('Hora não informada: confira');
-    if (!data) R.avisos.push('Data não informada: ficou hoje');
+    if (!data && !R.avisos.some(a => /Data inv/.test(a))) R.avisos.push('Data não informada: ficou hoje');
     return { ...R, tipo, avisos: [...R.avisos, ...ent.avisos], cli: ent.cli, veh: ent.veh, data: data || hoje(), hora: hora || '08:00', svc: sv ? sv.nome : desc, obs: sv && toks(desc).some(x => !toks(sv.nome).includes(x)) ? desc : '' }
   }
 
   if (tipo == 'desp') {
     T.take(/\b(?:lanc\w*|registr\w*|anot\w*|adicion\w*|coloc\w*|cadastr\w*|nova|novo)?\s*(?:uma\s+|a\s+)?(?:despesas?|gastos?)\b(?:\s+(?:de|com|do|da|no|na))?/) || T.take(/\b(?:eu\s+)?(?:gastei|paguei|comprei|pagamos|compramos)\b(?:\s+(?:o|a|um|uma))?/);
     const rec = !!T.take(/\b(?:que\s+)?(?:repete\s+)?(?:todo mes|todos os meses|mensal|mensalmente|por mes|ao mes)\b/);
-    const data = pegaData(T, true);
+    let data = pegaData(T, true); if (data == 'INV') { data = ''; R.avisos.push('Data inválida: ficou hoje') }
     const vs = pegaValores(T); let valor = vs.length ? vs[0].v : numeroSolto(T, true);
     const W = palavras(T.o), desc = sobra(W, new Set()).replace(/^(?:com|de)\s+/i, '');
     if (!valor) R.avisos.push('Valor não entendido: digite');
@@ -384,7 +386,7 @@ function interpreta(frase) {
   if (tipo == 'pag' || tipo == 'item') {
     const osNum = pegaNumOS(T);
     T.take(new RegExp('\\b(?:na|da|a|pra|para a|nessa|essa|nesta|desta|numa|dessa)\\s+' + OSW + '(?=\\s|$)')) || T.take(/\bordem de servico\b/);
-    const data = tipo == 'pag' ? pegaData(T, true) : '';
+    let data = tipo == 'pag' ? pegaData(T, true) : ''; if (data == 'INV') { data = ''; R.avisos.push('Data inválida: ficou hoje') }
     const fp = tipo == 'pag' ? pegaForma(T) : {};
     if (tipo == 'pag') T.take(/\b(?:eu\s+)?(?:recebi|recebe|receber|recebido|recebemos|registr\w*|lanc\w*)?\s*(?:o\s+|um\s+)?(?:pagamento|pagou|pagaram|quitou|quitar|deu entrada)?\b(?:\s+(?:de|do|da))?/);
     else T.take(/\b(?:adicion\w*|coloc\w*|lanc\w*|inclu\w*|bot[ae]|poe|ponha|acrescent\w*|inser\w*)\b/);
@@ -579,5 +581,6 @@ function mostraPlaca(r) {
 }
 
 G.VZ = { interpreta, numWords, achaPlaca, canon, roda, fecha, abre, executa, mostraPlaca };
-if (UI) { if (document.readyState == 'loading') document.addEventListener('DOMContentLoaded', monta); else monta() }
+if (UI) { if (document.readyState == 'loading') document.addEventListener('DOMContentLoaded', monta); else monta();
+  document.addEventListener('keydown', ev => { if (ev.key == 'Escape' && document.getElementById('vz') && document.getElementById('vz').innerHTML) fecha() }) }
 })(typeof window != 'undefined' ? window : globalThis);
