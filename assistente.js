@@ -337,7 +337,7 @@ function achaSvc(desc) {
 }
 
 /* ---------- telas ---------- */
-const TELAS = [['dash', /\b(painel|inicio|tela inicial|resumo)\b/], ['agenda', /\b(agenda|agendamentos|horarios)\b/], ['clients', /\bclientes?\b/], ['vehicles', /\bveiculos\b/], ['quotes', /\borcamentos?\b/], ['orders', /\b(ordens(?: de servico)?|o\.?s\.?|lista de os)\b/], ['stock', /\b(estoque|pecas em estoque)\b/], ['fin', /\b(financas|financeiro|caixa|lucro|faturamento)\b/], ['notas', /\b(notas|nota fiscal|notas fiscais)\b/], ['entradas', /\b(entradas|compras)\b/], ['cfg', /\b(oficina|configuracoes|configuracao|ajustes)\b/]];
+const TELAS = [['diag', /\b(diagnosticos?|casos resolvidos)\b/], ['dash', /\b(painel|inicio|tela inicial|resumo)\b/], ['agenda', /\b(agenda|agendamentos|horarios)\b/], ['clients', /\bclientes?\b/], ['vehicles', /\bveiculos\b/], ['quotes', /\borcamentos?\b/], ['orders', /\b(ordens(?: de servico)?|o\.?s\.?|lista de os)\b/], ['stock', /\b(estoque|pecas em estoque)\b/], ['fin', /\b(financas|financeiro|caixa|lucro|faturamento)\b/], ['notas', /\b(notas|nota fiscal|notas fiscais)\b/], ['entradas', /\b(entradas|compras)\b/], ['cfg', /\b(oficina|configuracoes|configuracao|ajustes)\b/]];
 
 /* ================= interpretar ================= */
 function interpreta(frase) {
