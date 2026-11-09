@@ -120,6 +120,7 @@ main{padding:14px 14px 28px}:root{padding-bottom:0}
 .osv{text-align:right;flex:none}.osv small{font-size:11px!important;letter-spacing:.1em;text-transform:uppercase}.osv b{font:600 26px/1.05 "Barlow Condensed",sans-serif}
 .osh3{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.osh3 .sp{flex:1}
 .ostabs{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:14px}
+#ostabs{grid-template-columns:repeat(var(--n,6),1fr)}@media (max-width:760px){#ostabs{grid-template-columns:repeat(var(--m,3),1fr)}}
 .ost{display:flex;flex-direction:column;align-items:center;gap:3px;padding:10px 4px 9px;border:1px solid var(--ln);border-radius:10px;background:var(--sf);color:var(--mut);font:600 13.5px Barlow,sans-serif;margin:0;min-width:0;cursor:pointer;transition:border-color .15s}
 .ost svg{width:22px;height:22px}.ost .l{color:var(--ink);white-space:nowrap}
 .ost .s{font-size:11.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
@@ -705,13 +706,14 @@ function addFotos(fs){const o=od(S.id),t=$('#ft').value;[...fs].forEach(f=>picRe
 function addPag(pre){const o=od(S.id);modal('Registrar pagamento',[['forma','Forma','select',FP],['valor','Valor pago (R$)','number',0,1],['parc','Parcelas (se parcelado)','number'],['data','Data','date',0,1]],{valor:Math.max(0,oTot(o)-paid(o)),data:today(),parc:1,...(pre||{})},p=>{const v=+p.valor,rest=oTot(o)-paid(o);if(!(v>0))return toast('Informe um valor maior que zero');if(v>rest+0.005)return toast('Valor maior que o restante da O.S. ('+R(Math.max(0,rest))+')');o.pags.push({...p,valor:v});save();render()})}
 function waOS(){const o=od(S.id),c=cl(o.cli),v=o.veh?vlabel(vh(o.veh)):'';
  waDoc(genOS,o,c.tel,`Olá, ${c.nome}! Tudo bem?\n\nEsse documento é a ordem de serviço Nº ${o.num}${v?' do seu '+v:''}, com os serviços e peças registrados.\nSituação: ${o.status}\nValor total: ${R(oTot(o))}\n\nQualquer dúvida, estou à disposição.\n\n${empNome()}`)}
-function Vorder(){const o=od(S.id);if(!o)return Vorders();const T=[['resumo','Resumo'],['check','Checklist'],['laudo','Laudo'],['fotos','Fotos'],['pag','Pagamento'],...(DONO()?[['nf','Nota fiscal']]:[])];if(!DONO()&&S.tab=='nf')S.tab='resumo';
+function Vorder(){const o=od(S.id);if(!o)return Vorders();const T=[['resumo','Resumo'],['check','Checklist'],['diag','Diagnóstico'],['laudo','Laudo'],['fotos','Fotos'],['pag','Pagamento'],...(DONO()?[['nf','Nota fiscal']]:[])];if(!DONO()&&S.tab=='nf')S.tab='resumo';
  let b='';
  if(S.tab=='resumo')b=`<div class="card"><div class="g2"><label>Mecânico responsável<input value="${e(o.mec)}" onchange="U('mec',this.value)"></label><label>Horas de mão de obra<input value="${e(o.horas)}" onchange="U('horas',this.value)"></label></div>
  <label>Problema relatado<textarea onchange="U('problema',this.value)">${e(o.problema)}</textarea></label><label>Peças utilizadas<textarea onchange="U('pecas',this.value)">${e(o.pecas)}</textarea></label></div>
  <div class="card"><b>Serviços autorizados</b> <small class="muted">Toque no item para editar</small><table>${o.items.map((i,n)=>`<tr style="cursor:pointer" onclick="editItem(od(S.id),${n},1)"><td>${e(i.d)}<br><small class="muted">${e(i.t)}${i.q!=1?' · '+R(i.v)+' cada':''}</small></td><td class="n">${i.q}x</td><td class="n">${R(i.q*i.v)}</td><td style="white-space:nowrap"><button class="sm" aria-label="Editar item" onclick="event.stopPropagation();editItem(od(S.id),${n},1)">✎</button> <button class="sm" aria-label="Remover item" onclick="event.stopPropagation();rmOS(${n})">×</button></td></tr>`).join('')||'<tr><td class="muted">Nenhum item.</td></tr>'}</table>
  <div class="bar" style="margin-top:10px"><button onclick="addItem(od(S.id))">Adicionar item</button><button onclick="addStock(od(S.id),1)">Peça do estoque</button><button onclick="genOS(od(S.id))">Gerar PDF da O.S.</button><span class="sp"></span><span class="tot">${R(oTot(o))}</span></div></div>`;
  if(S.tab=='check')b=`<div class="bar"><button class="pr" onclick="genChecklist(od(S.id))">Gerar PDF do checklist</button></div><div class="card">${CK.map((n,i)=>{const c=o.ck[n]||{};return`<div class="ck"><b>${n}</b><select onchange="ckSet('${n}','s',this.value)">${['—','OK','Atenção','Defeito'].map(x=>`<option ${c.s==x?'selected':''}>${x}</option>`).join('')}</select><input type="text" placeholder="Observação" value="${e(c.obs)}" onchange="ckSet('${n}','obs',this.value)"><div class="fbs">${c.foto?`<img class="ckimg" ${fimg(c.foto)} height="34" alt="foto de ${e(n)}" onclick="verFoto(this.src)">`:''}${fotoBtns(`ckFoto('${n}',this.files[0])`,{ico:1,um:1})}</div></div>`}).join('')}</div>`;
+ if(S.tab=='diag')b=typeof DGtab=='function'?DGtab(o):'<p class="muted">Carregando o diagnóstico…</p>';
  if(S.tab=='laudo')b=Vlaudo(o);
  if(S.tab=='fotos')b=`<div class="card"><div class="bar"><select id="ft" style="width:auto;margin:0">${FT.map(x=>`<option>${x}</option>`).join('')}</select><span class="sp"></span><div class="fbs">${fotoBtns('addFotos([...this.files])',{cls:''})}</div></div></div>
  <div class="ph">${o.fotos.map((f,i)=>`<figure><img ${fimg(f.src)} alt="${e(f.t)}" onclick="verFoto(this.src)"><figcaption><b>${e(f.t)}</b><br><input value="${e(f.obs)}" placeholder="Observação" onchange="od(S.id).fotos[${i}].obs=this.value;save()"><button class="sm" style="margin-top:4px" onclick="od(S.id).fotos.splice(${i},1);save();render()">Remover</button></figcaption></figure>`).join('')}</div>${o.fotos.length?'':'<p class="muted">As fotos ficam vinculadas a esta O.S. como prova do que foi encontrado e executado.</p>'}`;
@@ -723,11 +725,11 @@ function Vorder(){const o=od(S.id);if(!o)return Vorders();const T=[['resumo','Re
  return`<div class="osh" style="--c:${SC[o.status]||'#777'}"><div class="osh1"><button class="ib" aria-label="Voltar para as O.S." onclick="go('orders')">${svgi('osback')}</button><div class="osh-t"><small>Ordem de serviço</small><h1>Nº ${e(o.num)}</h1></div><select class="ossel" aria-label="Situação da O.S." onchange="setSt(this.value)">${ST.map(s=>`<option ${o.status==s?'selected':''}>${s}</option>`).join('')}</select></div>
  <div class="osh2"><div><b>${e(vlabel(vh(o.veh)))}</b><small>${e(c.nome||'Sem cliente')}${o.aberta?' · entrada '+D(o.aberta):''}</small></div><div class="osv"><small>Total</small><b>${R(oTot(o))}</b></div></div>
  <div class="osh3"><button class="wa sm" onclick="waOS()">WhatsApp</button><button class="sm" onclick="genOS(od(S.id))">PDF da O.S.</button><span class="sp"></span>${DONO()?'<button class="dg sm" onclick="confirmDel(this,delOS)">Excluir</button>':''}</div></div>
- <div class="ostabs" id="ostabs" role="tablist" aria-label="Seções da O.S.">${T.map(([k,l])=>`<button type="button" role="tab" aria-selected="${S.tab==k}" class="ost ${S.tab==k?'on':''}" onclick="osTab('${k}')">${svgi(OSICO[k])}<span class="l">${l}</span><span class="s" style="color:${ti[k][1]}">${e(ti[k][0])}</span></button>`).join('')}</div><div id="ospane">${b}</div>`}
-const OSICO={resumo:'osres',check:'oscheck',laudo:'oslaudo',fotos:'osfotos',pag:'ospag',nf:'notas'},OSORD=['resumo','check','laudo','fotos','pag','nf'];
+ <div class="ostabs" id="ostabs" role="tablist" aria-label="Seções da O.S." style="--n:${T.length};--m:${T.length>6?4:3}">${T.map(([k,l])=>`<button type="button" role="tab" aria-selected="${S.tab==k}" class="ost ${S.tab==k?'on':''}" onclick="osTab('${k}')">${svgi(OSICO[k])}<span class="l">${l}</span><span class="s" style="color:${ti[k][1]}">${e(ti[k][0])}</span></button>`).join('')}</div><div id="ospane">${b}</div>`}
+const OSICO={resumo:'osres',check:'oscheck',diag:'diag',laudo:'oslaudo',fotos:'osfotos',pag:'ospag',nf:'notas'},OSORD=['resumo','check','diag','laudo','fotos','pag','nf'];
 function osTabInfo(o){const st=n=>(o.ck[n]||{}).s,n0=CK.filter(n=>['OK','Atenção','Defeito'].includes(st(n))).length,def=CK.filter(n=>st(n)=='Defeito').length,L=lOf(o),lp=(L.rec||!o.problema?0:(L.rec=o.problema),lProg(o)),tot=oTot(o),rest=tot-paid(o),F=FC(),T=nfTotais(o);
  const need=['nfe','nfse'].filter(t=>t=='nfe'?T.nP:T.nS),aut=need.filter(t=>{const n=notaAtiva(o.id,t,F.modo);return n&&n.status=='autorizado'}).length,G='#2E8B57',A='#C98200',Rd='#B4472E',M='var(--mut)',ni=o.items.length;
- return{resumo:[ni?ni+(ni==1?' item':' itens'):'Sem itens',ni?M:A],check:[def?def+' defeito(s)':n0+'/'+CK.length,def?Rd:n0==CK.length?G:n0?A:M],laudo:[lp.ok==lp.tot?'Completo':lp.ok?lp.ok+'/'+lp.tot:'Em branco',lp.ok==lp.tot?(L.cond=='nao'?Rd:G):lp.ok?A:M],
+ return{resumo:[ni?ni+(ni==1?' item':' itens'):'Sem itens',ni?M:A],check:[def?def+' defeito(s)':n0+'/'+CK.length,def?Rd:n0==CK.length?G:n0?A:M],diag:typeof dgInfo=='function'?dgInfo(o):['',M],laudo:[lp.ok==lp.tot?'Completo':lp.ok?lp.ok+'/'+lp.tot:'Em branco',lp.ok==lp.tot?(L.cond=='nao'?Rd:G):lp.ok?A:M],
   fotos:[o.fotos.length?o.fotos.length+(o.fotos.length==1?' foto':' fotos'):'Nenhuma',o.fotos.length?G:M],pag:[tot<=0?'Sem valor':rest<=0.005?'Pago':paid(o)>0?'Falta '+R(rest):'A receber',tot<=0?M:rest<=0.005?G:A],
   nf:[!need.length?'Sem itens':aut==need.length?'Emitida':aut?aut+' de '+need.length:'Não emitida',!need.length?M:aut==need.length?G:A]}}
 function osTab(k){S.tab=k;render();const t=$('#ostabs'),nv=$('#nav');if(!t)return;const y=t.getBoundingClientRect().top+scrollY-(nv?nv.offsetHeight:0)-8;if(scrollY>y)scrollTo({top:y,behavior:'smooth'})}
@@ -1558,7 +1560,7 @@ async function genLaudo(o){
  await Z.end(fname('Laudo',o))}
 
 /* ---------- Kit visual: mesmo padrão da tela da O.S. em todas as telas ---------- */
-const PCOL={dash:'#F5B700',agenda:'#2F6FB0',clients:'#17A2B8',vehicles:'#2F6FB0',quotes:'#8E5BD0',orders:'#F5B700',notas:'#2E8B57',entradas:'#C98200',stock:'#2E8B57',fin:'#2E8B57',cfg:'#7F8C8D'};
+const PCOL={diag:'#C0392B',dash:'#F5B700',agenda:'#2F6FB0',clients:'#17A2B8',vehicles:'#2F6FB0',quotes:'#8E5BD0',orders:'#F5B700',notas:'#2E8B57',entradas:'#C98200',stock:'#2E8B57',fin:'#2E8B57',cfg:'#7F8C8D'};
 const KG='#2E8B57',KA='#C98200',KR='#B4472E',KB='#2F6FB0',KM='var(--mut)';
 function head(o){return`<div class="osh pgh" style="--c:${o.c||'var(--hi)'}"><div class="osh1">${o.back?`<button class="ib" aria-label="Voltar" onclick="${o.back}">${svgi('osback')}</button>`:`<span class="ib pic" aria-hidden="true">${svgi(o.ico)}</span>`}<div class="osh-t"><small>${e(o.kick||'')}</small><h1>${o.title}</h1></div>${o.right||''}</div>${o.sub?`<div class="osh2">${o.sub}</div>`:''}${o.acts?`<div class="osh3">${o.acts}</div>`:''}</div>`}
 const hsub=(b,s,lab,val)=>`<div><b>${b}</b>${s?`<small>${s}</small>`:''}</div>${lab?`<div class="osv"><small>${lab}</small><b>${val}</b></div>`:''}`;
@@ -1744,6 +1746,7 @@ alert:'<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2
 clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
 osres:'<path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/>',
 oscheck:'<rect x="3" y="3" width="18" height="18" rx="3"/><path d="m8 12 3 3 5-6"/>',
+diag:'<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
 oslaudo:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h6"/><path d="M14 2v6h6"/><circle cx="16.5" cy="16.5" r="3.5"/><path d="m22 22-3-3"/>',
 osfotos:'<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="3.5"/>',
 ospag:'<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/>',
@@ -1759,8 +1762,8 @@ function navHtml(){const L=NAVX(),c=db.cfg||{},nm=c.nome||'Fio-Mar',
  return`<div class="nb"><div class="brand" onclick="go('dash')">${logo}<span class="bt"><b>${e(nm)}</b><small>Gestor de oficina</small></span></div>
  <div class="nbr">${L.some(x=>x[0]=='inst')?`<button type="button" class="nbtn" aria-label="Instalar app" onclick="instalarApp()">${svgi('inst')}<span>Instalar</span></button>`:''}<button type="button" class="nbtn" aria-label="Sair" onclick="doOut()">${svgi('out')}<span>Sair</span></button></div>
  <div class="nt">${L.filter(x=>!['out','inst'].includes(x[0])).map(([k,l])=>`<a class="${on(k)?'on':''}" onclick="go('${k}')">${svgi(k)}<span>${l}</span></a>`).join('')}</div></div>`}
-const V={entradas:Ventradas,entrada:Ventrada,notas:Vnotas,dash:Vdash,fin:Vfin,agenda:Vagenda,agsvc:Vagsvc,clients:Vclients,vehicles:Vvehicles,quotes:Vquotes,quote:Vquote,orders:Vorders,order:Vorder,recibo:Vrecibo,cfg:Vcfg,stock:Vstock,prod:Vprod,out:()=>{doOut();return ''}};
-const NAV=[['dash','Painel'],['agenda','Agenda'],['clients','Clientes'],['vehicles','Veículos'],['quotes','Orçamentos'],['orders','O.S.'],['notas','Notas'],['entradas','Entradas'],['stock','Estoque'],['fin','Finanças'],['cfg','Oficina'],['out','Sair']];
+const V={diag:()=>typeof Vdiag=='function'?Vdiag():'<p class="muted">Carregando o diagnóstico…</p>',entradas:Ventradas,entrada:Ventrada,notas:Vnotas,dash:Vdash,fin:Vfin,agenda:Vagenda,agsvc:Vagsvc,clients:Vclients,vehicles:Vvehicles,quotes:Vquotes,quote:Vquote,orders:Vorders,order:Vorder,recibo:Vrecibo,cfg:Vcfg,stock:Vstock,prod:Vprod,out:()=>{doOut();return ''}};
+const NAV=[['dash','Painel'],['agenda','Agenda'],['clients','Clientes'],['vehicles','Veículos'],['quotes','Orçamentos'],['orders','O.S.'],['diag','Diagnóstico'],['notas','Notas'],['entradas','Entradas'],['stock','Estoque'],['fin','Finanças'],['cfg','Oficina'],['out','Sair']];
 function render(keep){RTICK++;setTimeout(fhyd,0);if(!SES)return authView();if(PEND)return pendView();if(BLOQ)return bloqView();if(SEMOF)return semOfView();if(!DONO()&&DONLY.includes(S.v))S.v='dash';const m=$('#main');$('#nav').style.display='';const a=document.activeElement,id=a&&a.placeholder,pos=a&&a.selectionStart;
  $('#nav').innerHTML=navHtml();{const ac=$('#nav a.on'),nt=$('#nav .nt');if(ac&&nt)nt.scrollLeft=ac.offsetLeft-(nt.clientWidth-ac.offsetWidth)/2}
  m.innerHTML=V[S.v]();document.querySelectorAll('nav a,.tabs a,.row,.tile,.lc:not(.nc)').forEach(x=>x.tabIndex=0);
@@ -1782,10 +1785,11 @@ addEventListener('appinstalled',()=>{INST=null;toast('App instalado');if(typeof 
 if('serviceWorker' in navigator&&/^https?:/.test(location.protocol)){const SWW=navigator.serviceWorker,tinha=!!SWW.controller;let RL=false;
  SWW.addEventListener('controllerchange',()=>{if(!tinha||RL)return;RL=true;try{if(DIRTY){clearTimeout(TS);push()}}catch(x){}try{toast('Atualizando para a nova versão...')}catch(x){}setTimeout(()=>location.reload(),600)});
  addEventListener('load',()=>SWW.register('sw.js',{updateViaCache:'none'}).then(r=>{const up=()=>r.update().catch(()=>{});setInterval(up,30*60e3);document.addEventListener('visibilitychange',()=>{if(document.visibilityState=='visible')up()})}).catch(()=>{}))}
-const APP_VER='2.3.0';
+const APP_VER='2.4.0';
 (function(){const f=document.getElementById('ver');if(f)f.textContent='Fio-Mar Gestor · versão '+APP_VER;document.title=document.title})();
 boot();
 </script>
+<script src="diagnostico.js"></script>
 <script src="assistente.js"></script>
 </body>
 </html>
